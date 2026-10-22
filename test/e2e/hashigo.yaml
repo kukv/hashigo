@@ -1,0 +1,20 @@
+# WSL 上の Docker ではコンテナの /proc/version にも microsoft が入り、WSL と誤判定される。
+# コンテナ内では Linux 版 ssh を使うので native に固定する。
+wsl:
+  mode: native
+
+hosts:
+  bastion: { host: bastion, user: hashigo }
+  mid:     { host: mid, user: hashigo, via: bastion }
+  ap:      { host: ap, user: hashigo, via: mid }
+
+tunnels:
+  two-hop:
+    via: mid
+    forwards: ["15432:db:5432"]
+  three-hop:
+    via: ap
+    forwards: ["25432:db:5432"]
+
+groups:
+  all: [two-hop, three-hop]
