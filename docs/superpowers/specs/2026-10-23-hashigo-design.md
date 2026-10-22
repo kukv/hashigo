@@ -256,7 +256,7 @@ type Driver interface {
       -L 127.0.0.1:15432:db.internal:5432 ... <user@最終ホスト>
 ```
 
-- `-J` は `via` を再帰的にたどり、遠い順に並べる（`-J ec2-user@bastion,admin@10.0.1.10`）
+- `-J` は `via` を再帰的にたどり、手元に近い踏み台から順に並べる（`-J ec2-user@bastion,admin@10.0.1.10`）
 - `user` が無いホストは `host` だけを書く
 - `BatchMode=yes` は計画書に無い追加。子は別プロセスグループで動き stdin も `/dev/null` なので、ホスト鍵の確認やパスワード入力が出ると止まってしまう。代わりにすぐ失敗させ、「初回は `ssh <host>` を手で実行してホスト鍵を登録してください」と案内する
 - `Prepare` は `Preview` と同じものを返す
