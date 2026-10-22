@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -87,6 +88,41 @@ func TestSelect(t *testing.T) {
 	}
 	if got := ids("nope"); !strings.Contains(got, `"nope" に一致する環境・グループ・トンネルがありません`) {
 		t.Errorf("存在しない対象 = %s", got)
+	}
+}
+
+func TestRouteCycle(t *testing.T) {
+	cfg := newConfig()
+	root := cfg.Envs[""]
+	root.Hosts["a"] = &Host{Name: "a", Host: "a.example.com", Via: "b"}
+	root.Hosts["b"] = &Host{Name: "b", Host: "b.example.com", Via: "a"}
+	t1 := &Tunnel{Name: "t1", Via: "a"}
+	root.Tunnels["t1"] = t1
+
+	_, err := cfg.Route(t1)
+	if err == nil || !strings.Contains(err.Error(), "via が循環しています: a → b → a") {
+		t.Fatalf("循環のエラーになるはず: %v", err)
+	}
+	var ce *cycleError
+	if !errors.As(err, &ce) {
+		t.Errorf("*cycleError ではない: %T", err)
+	}
+}
+
+func TestRouteMissingVia(t *testing.T) {
+	cfg := newConfig()
+	root := cfg.Envs[""]
+	root.Hosts["a"] = &Host{Name: "a", Host: "a.example.com", Via: "nope"}
+	t1 := &Tunnel{Name: "t1", Via: "a"}
+	root.Tunnels["t1"] = t1
+	t2 := &Tunnel{Name: "t2", Via: "nope"}
+	root.Tunnels["t2"] = t2
+
+	if _, err := cfg.Route(t1); err == nil || !strings.Contains(err.Error(), `via のホスト "nope" が見つかりません`) {
+		t.Errorf("ホストの via が無い場合 = %v", err)
+	}
+	if _, err := cfg.Route(t2); err == nil || !strings.Contains(err.Error(), `t2: via のホスト "nope" が見つかりません`) {
+		t.Errorf("トンネルの via が無い場合 = %v", err)
 	}
 }
 
