@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	"github.com/goccy/go-yaml"
 )
@@ -14,6 +16,8 @@ type loader struct {
 	problems    Problems
 	hasDefaults bool
 	hasWSL      bool
+	stack       []string        // 読み込み中のファイル（ループ検出用）
+	seen        map[string]bool // 読み込み済みのファイル
 }
 
 // Load は設定ファイルを読み込み、正規化して返す。問題があれば Problems を返す。
@@ -23,7 +27,7 @@ func Load(path, goos string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	l := &loader{cfg: newConfig(), data: map[string][]byte{}}
+	l := &loader{cfg: newConfig(), data: map[string][]byte{}, seen: map[string]bool{}}
 	l.loadFile(abs, Source{})
 	if len(l.problems) > 0 {
 		return nil, l.finish()
@@ -47,6 +51,15 @@ func (l *loader) finish() Problems {
 }
 
 func (l *loader) loadFile(path string, from Source) {
+	if slices.Contains(l.stack, path) {
+		l.problemf(from, "include がループしています: %s", strings.Join(append(l.stack, path), " → "))
+		return
+	}
+	if l.seen[path] {
+		return
+	}
+	l.seen[path] = true
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		l.problemf(from, "設定ファイルを読めません: %v", err)
@@ -61,6 +74,16 @@ func (l *loader) loadFile(path string, from Source) {
 		return
 	}
 	l.merge(path, &r)
+
+	l.stack = append(l.stack, path)
+	defer func() { l.stack = l.stack[:len(l.stack)-1] }()
+	for i, inc := range r.Include {
+		p := inc
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(filepath.Dir(path), p)
+		}
+		l.loadFile(filepath.Clean(p), Source{File: path, Path: []any{"include", i}})
+	}
 }
 
 func (l *loader) merge(file string, r *rawFile) {
