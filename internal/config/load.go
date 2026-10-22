@@ -29,6 +29,9 @@ func Load(path, goos string) (*Config, error) {
 	}
 	l := &loader{cfg: newConfig(), data: map[string][]byte{}, seen: map[string]bool{}}
 	l.loadFile(abs, Source{})
+	if len(l.problems) == 0 {
+		l.problems = append(l.problems, validate(l.cfg, goos)...)
+	}
 	if len(l.problems) > 0 {
 		return nil, l.finish()
 	}
