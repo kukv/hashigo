@@ -81,6 +81,18 @@ groups:
 wsl:
   mode: bridge
 `, "linux", "wsl.mode は auto / mirrored / relay / native のいずれかです"},
+		{"hosts の host が - 始まり", `
+hosts:
+  h: { host: "-oProxyCommand=id" }
+`, "linux", `host は - で始められません: "-oProxyCommand=id"`},
+		{"hosts の user が - 始まり", `
+hosts:
+  h: { host: h, user: "-oProxyCommand=id" }
+`, "linux", `user は - で始められません: "-oProxyCommand=id"`},
+		{"トンネルの host が - 始まり", `
+tunnels:
+  t1: { host: "-oProxyCommand=id", forwards: ["15432:db:5432"] }
+`, "linux", `host は - で始められません: "-oProxyCommand=id"`},
 		{"名前にドット", `
 environments:
   a.b: {}

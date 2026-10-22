@@ -40,7 +40,7 @@ func (a *app) cmdCmd() *cobra.Command {
 	}
 }
 
-var safeArg = regexp.MustCompile(`^[A-Za-z0-9_@%+=:,./\[\]-]+$`)
+var safeArg = regexp.MustCompile(`^[A-Za-z0-9_@%+=:,./-]+$`)
 
 // shellJoin は引数をシェルに貼り付けられる形でつなぐ。
 func shellJoin(args []string) string {

@@ -23,7 +23,7 @@ func TestArgs(t *testing.T) {
 		Keepalive: 30 * time.Second,
 	})
 	want := "-N -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o BatchMode=yes " +
-		"-J ec2-user@bastion,10.0.0.2 -L 127.0.0.1:15432:db.internal:5432 -L [::1]:16379:[fd00::1]:6379 admin@10.0.1.10"
+		"-J ec2-user@bastion,10.0.0.2 -L 127.0.0.1:15432:db.internal:5432 -L [::1]:16379:[fd00::1]:6379 -- admin@10.0.1.10"
 	specs := d.Preview()
 	if len(specs) != 1 {
 		t.Fatalf("spec は1つ: %d", len(specs))
@@ -52,7 +52,7 @@ func TestArgsNoJumpAndKeepalive(t *testing.T) {
 		Keepalive: 1500 * time.Millisecond,
 	})
 	got := strings.Join(d.Preview()[0].Args, " ")
-	if strings.Contains(got, "-J") || !strings.Contains(got, "ServerAliveInterval=2") || !strings.HasSuffix(got, " app1") {
+	if strings.Contains(got, "-J") || !strings.Contains(got, "ServerAliveInterval=2") || !strings.HasSuffix(got, " -- app1") {
 		t.Errorf("args = %s", got)
 	}
 }

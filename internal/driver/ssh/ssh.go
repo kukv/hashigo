@@ -53,7 +53,7 @@ func (d *Driver) args() []string {
 	for _, f := range d.o.Forwards {
 		args = append(args, "-L", fmt.Sprintf("%s:%d:%s:%d", bracket(f.Bind), f.LocalPort, bracket(f.RemoteHost), f.RemotePort))
 	}
-	return append(args, d.o.Route.Dest)
+	return append(args, "--", d.o.Route.Dest)
 }
 
 // Preview は起動する ssh プロセスを返す。

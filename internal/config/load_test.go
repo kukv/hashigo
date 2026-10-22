@@ -141,6 +141,11 @@ func TestLoadProblems(t *testing.T) {
 	_, ps = loadString(t, "tunnels:\n  t1:\n    host: x\n", "linux")
 	wantProblem(t, ps, "forwards がありません")
 
+	_, ps = loadString(t, "tunnels:\n  t1:\n    host: x\n    forwards: [~]\n", "linux")
+	wantProblem(t, ps, "forwards の要素が空です")
+	_, ps = loadString(t, "tunnels:\n  t1:\n    host: x\n    forwards: [\"1:a:1\", ~]\n", "linux")
+	wantProblem(t, ps, "forwards の要素が空です")
+
 	_, ps = loadString(t, "defaults:\n  profile: x\n", "linux")
 	wantProblem(t, ps, "defaults には profile / region を書けません")
 }

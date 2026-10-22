@@ -27,7 +27,7 @@ func (a *app) upCmd() *cobra.Command {
 		Short: "トンネルを起動する（Ctrl-C で全停止）",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
-			ctx, stop := signal.NotifyContext(c.Context(), os.Interrupt, syscall.SIGTERM)
+			ctx, stop := signal.NotifyContext(c.Context(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 			defer stop()
 			return a.up(ctx, c, args, yes)
 		},

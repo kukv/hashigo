@@ -97,9 +97,9 @@ func TestCmdCmd(t *testing.T) {
 	}
 	want := `# 実行環境: linux
 # prod-db  ssh=/usr/bin/ssh  ssh_config=/home/u/.ssh/config
-/usr/bin/ssh -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o BatchMode=yes -J ec2-user@bastion.example.com -L 127.0.0.1:15432:db.internal:5432 -L 127.0.0.1:16379:redis.internal:6379 admin@10.0.1.10
+/usr/bin/ssh -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o BatchMode=yes -J ec2-user@bastion.example.com -L 127.0.0.1:15432:db.internal:5432 -L 127.0.0.1:16379:redis.internal:6379 -- admin@10.0.1.10
 # web  ssh=/usr/bin/ssh  ssh_config=/home/u/.ssh/config
-/usr/bin/ssh -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=45 -o ServerAliveCountMax=3 -o BatchMode=yes -L 127.0.0.1:8080:localhost:80 app1
+/usr/bin/ssh -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=45 -o ServerAliveCountMax=3 -o BatchMode=yes -L 127.0.0.1:8080:localhost:80 -- app1
 `
 	if out != want {
 		t.Errorf("cmd の出力 =\n%s\nwant\n%s", out, want)
@@ -123,5 +123,8 @@ func TestShellJoin(t *testing.T) {
 	got := shellJoin([]string{"/usr/bin/ssh", "-o", "Foo=bar baz", "it's"})
 	if got != `/usr/bin/ssh -o 'Foo=bar baz' 'it'\''s'` {
 		t.Errorf("shellJoin = %s", got)
+	}
+	if got := shellJoin([]string{"[::1]:8080:host:80"}); got != `'[::1]:8080:host:80'` {
+		t.Errorf("IPv6 は quote される: %s", got)
 	}
 }

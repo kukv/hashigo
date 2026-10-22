@@ -99,6 +99,8 @@ func (v *validator) hosts() {
 			if h.Host == "" {
 				v.add(h.Src, "host がありません")
 			}
+			v.noDash(h.Src, "host", h.Host)
+			v.noDash(h.Src, "user", h.User)
 			if h.Via == "" {
 				continue
 			}
@@ -114,11 +116,19 @@ func (v *validator) hosts() {
 	}
 }
 
+// noDash は ssh のオプションとして解釈される - 始まりの値を拒否する。
+func (v *validator) noDash(src Source, key, val string) {
+	if strings.HasPrefix(val, "-") {
+		v.add(src.child(key), "%s は - で始められません: %q", key, val)
+	}
+}
+
 func (v *validator) tunnels() {
 	for _, t := range v.c.Tunnels() {
 		s := t.Settings
 		switch t.Type {
 		case "ssh":
+			v.noDash(t.Src, "host", t.Host)
 			if (t.Host == "") == (t.Via == "") {
 				v.add(t.Src, "host か via のどちらか一方を書きます")
 			}

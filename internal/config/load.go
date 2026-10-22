@@ -218,6 +218,10 @@ func (l *loader) addTunnel(env *Env, name string, r rawTunnel, src Source) {
 			l.problemf(src.child("forwards", i), "%v", f.Err)
 			continue
 		}
+		if f.LocalPort == 0 {
+			l.problemf(src.child("forwards", i), "forwards の要素が空です")
+			continue
+		}
 		t.Forwards = append(t.Forwards, f.Forward)
 	}
 	env.Tunnels[name] = t
