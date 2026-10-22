@@ -41,7 +41,7 @@ func Run(ctx context.Context, d Deps, args []string) int {
 	root.SetIn(d.Stdin)
 	root.SetOut(d.Stdout)
 	root.SetErr(d.Stderr)
-	root.AddCommand(newVersionCmd(), a.validateCmd(), a.cmdCmd())
+	root.AddCommand(newVersionCmd(), a.validateCmd(), a.cmdCmd(), a.upCmd())
 
 	if err := root.ExecuteContext(ctx); err != nil {
 		printError(d.Stderr, err)
