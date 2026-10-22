@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/kukv/hashigo/internal/config"
 	"github.com/kukv/hashigo/internal/platform"
 )
 
@@ -40,7 +41,7 @@ func Run(ctx context.Context, d Deps, args []string) int {
 	root.SetIn(d.Stdin)
 	root.SetOut(d.Stdout)
 	root.SetErr(d.Stderr)
-	root.AddCommand(newVersionCmd())
+	root.AddCommand(newVersionCmd(), a.validateCmd(), a.cmdCmd())
 
 	if err := root.ExecuteContext(ctx); err != nil {
 		printError(d.Stderr, err)
@@ -58,4 +59,14 @@ func printError(w io.Writer, err error) {
 		return
 	}
 	fmt.Fprintln(w, "エラー:", err)
+}
+
+// load は設定ファイルを探して読み込む。
+func (a *app) load(ctx context.Context) (*config.Config, string, error) {
+	p, err := config.Find(ctx, a.configPath, a.d.Host)
+	if err != nil {
+		return nil, "", err
+	}
+	cfg, err := config.Load(p, a.d.Host.GOOS)
+	return cfg, p, err
 }
