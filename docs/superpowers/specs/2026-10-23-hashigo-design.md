@@ -523,6 +523,8 @@ cobra で作る。全コマンド共通のフラグは `--config <path>` だけ�
 | 6 | 3段以上の `-J` と、DB へのログイン（計画書の確認事項1で未確認の部分） | MVP: 受け入れ確認 | 失敗したら `ProxyCommand` 方式を検討する |
 | 7 | WSL 上の Docker コンテナでは `/proc/version` に `microsoft` が入り、WSL と誤判定される（E2E では `wsl.mode: native` で回避） | 安定化: WSL 判定の見直し | `/proc/version` だけで判定せず、`WSL_DISTRO_NAME` / `WSL_INTEROP` または `/proc/sys/fs/binfmt_misc/WSLInterop` の存在も条件にする |
 
+MVP の実機受け入れ（プラン Task 14 Step 5）は未実施（2026-10-23 時点）。実機の踏み台を用意できる環境で、WSL mirrored モードを前提に実施する。そのとき、Ctrl-C のあとに Windows 側の `ssh.exe` が残らないこと（#1）を合否の項目にする。残る場合は、6.5 の taskkill による後始末を MVP に前倒しする。
+
 ユーザー側で用意・判断するもの:
 
 - 自分の YAML の置き場所（Windows 側に一本化するか）と、環境ごとのローカルポート帯（MVP で最初の設定ファイルを書くとき）
