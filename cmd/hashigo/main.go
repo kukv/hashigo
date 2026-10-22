@@ -12,7 +12,7 @@ import (
 
 func main() {
 	d := cli.Deps{
-		Host:   &platform.Host{},
+		Host:   platform.Detect(),
 		Stdin:  os.Stdin,
 		Stdout: os.Stdout,
 		Stderr: os.Stderr,
