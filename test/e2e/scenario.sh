@@ -15,6 +15,11 @@ EOF
 
 CFG=/e2e/hashigo.yaml
 
+# busybox の pgrep -x は argv[0]（/usr/bin/ssh）と比べるので、-x ssh では一致しない
+ssh_running() {
+  pgrep -f '^/usr/bin/ssh ' >/dev/null
+}
+
 # sshd の起動を待つ（3段目まで届けば全段そろっている）
 i=0
 until ssh -o BatchMode=yes -o ConnectTimeout=2 -J hashigo@bastion,hashigo@mid hashigo@ap true 2>/dev/null; do
@@ -22,6 +27,19 @@ until ssh -o BatchMode=yes -o ConnectTimeout=2 -J hashigo@bastion,hashigo@mid ha
   if [ "$i" -ge 30 ]; then echo "NG: sshd が起動しない"; exit 1; fi
   sleep 1
 done
+
+# client は bastion にしか届かない。多段を経由しないと db に届かないことを確かめる
+if socat -T2 - TCP:db:5432 </dev/null >/dev/null 2>&1; then
+  echo "NG: client から db へ直接届いてしまう"
+  exit 1
+fi
+for h in mid ap; do
+  if ssh -o BatchMode=yes -o ConnectTimeout=2 hashigo@"$h" true >/dev/null 2>&1; then
+    echo "NG: client から $h へ直接 ssh できてしまう"
+    exit 1
+  fi
+done
+echo "OK: client から mid / ap / db へ直接は届かない"
 
 hashigo validate --config "$CFG"
 hashigo cmd --config "$CFG" all
@@ -33,6 +51,11 @@ check() {
   port=$1
   n=0
   while [ "$n" -lt 30 ]; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      echo "NG: up が途中で終了した"
+      cat /tmp/up.log
+      return 1
+    fi
     got=$(echo ping | socat -t2 -T2 - TCP:127.0.0.1:"$port" 2>/dev/null || true)
     if [ "$got" = "ping" ]; then
       echo "OK: $port で db に届いた"
@@ -48,14 +71,36 @@ check() {
 check 15432
 check 25432
 
+if ! ssh_running; then
+  echo "NG: 停止前に ssh が動いていない"
+  cat /tmp/up.log
+  ps
+  exit 1
+fi
+
 kill -INT "$pid"
+n=0
+while kill -0 "$pid" 2>/dev/null; do
+  n=$((n + 1))
+  if [ "$n" -ge 15 ]; then
+    echo "NG: Ctrl-C から 15 秒たっても up が終了しない"
+    cat /tmp/up.log
+    kill -KILL "$pid"
+    exit 1
+  fi
+  sleep 1
+done
 if ! wait "$pid"; then
   echo "NG: Ctrl-C 後の up の終了コードが 0 ではない"
   cat /tmp/up.log
   exit 1
 fi
-sleep 1
-if pgrep -x ssh >/dev/null; then
+n=0
+while ssh_running && [ "$n" -lt 5 ]; do
+  n=$((n + 1))
+  sleep 1
+done
+if ssh_running; then
   echo "NG: up の停止後に ssh が残っている"
   ps
   exit 1
