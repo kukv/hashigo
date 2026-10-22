@@ -309,7 +309,7 @@ backoff(n) ←─┘   → failed(理由)   ← Fatal、または reconnect: fal
 
 - **再接続**: 1s → 2s → 4s → … と倍にしていき、上限は 60s。60 秒以上安定して動いたら 1s に戻す。`reconnect: false` なら終了時に failed にする
 - **ヘルスチェック**: 10 秒ごとに各ローカルポートへ TCP 接続する（タイムアウト 2 秒）。失敗したら unhealthy として表示するだけで、プロセスは kill しない
-- **MVP での動き**: 再接続とヘルスチェックは安定化フェーズで入れる。MVP では、プロセスが終了したらそのスロットを failed にし、他のスロットは動かし続ける
+- **MVP での動き**: 再接続とヘルスチェックは安定化フェーズで入れる。MVP では、プロセスが終了したらそのスロットを failed にし、他のスロットは動かし続ける。停止の指示が無いまま全スロットが終了したら、`up` は終了コード 1 で終わる
 
 ### 5.3 起動前のチェック
 
@@ -521,6 +521,7 @@ cobra で作る。全コマンド共通のフラグは `--config <path>` だけ�
 | 4 | `session-manager-plugin` の待ち受けが Windows の `127.0.0.1` 固定か。固定なら NAT モードの WSL から届かず、socat 中継も成り立たない | 安定化: ECS ドライバ | 届かなければ、ECS トンネルを relay で起動しようとしたときにエラーにし、mirrored を案内する。doctor でも警告する。計画書の「mirrored / relay の扱いも SSH と共通にできる」と食い違う可能性がある |
 | 5 | ECS 経由の転送を、タスク入れ替え後の再接続も含めて安定して張れるか | 安定化: ECS ドライバ | |
 | 6 | 3段以上の `-J` と、DB へのログイン（計画書の確認事項1で未確認の部分） | MVP: 受け入れ確認 | 失敗したら `ProxyCommand` 方式を検討する |
+| 7 | WSL 上の Docker コンテナでは `/proc/version` に `microsoft` が入り、WSL と誤判定される（E2E では `wsl.mode: native` で回避） | 安定化: WSL 判定の見直し | `/proc/version` だけで判定せず、`WSL_DISTRO_NAME` / `WSL_INTEROP` または `/proc/sys/fs/binfmt_misc/WSLInterop` の存在も条件にする |
 
 ユーザー側で用意・判断するもの:
 

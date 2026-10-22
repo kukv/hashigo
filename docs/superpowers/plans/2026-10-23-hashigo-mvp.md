@@ -273,7 +273,7 @@ Expected: PASS、ビルド成功
 ```bash
 go mod tidy
 git add go.mod go.sum cmd internal Makefile .gitignore
-git commit -m "feat: プロジェクトの雛形と version コマンドを追加"
+git commit -m "feat: プロジェクトの雛形と version コマンドを追加" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
 ---
@@ -655,7 +655,7 @@ Expected: PASS
 
 ```bash
 git add internal/platform cmd/hashigo/main.go
-git commit -m "feat: WSL 判定と ssh バイナリの選択を追加"
+git commit -m "feat: WSL 判定と ssh バイナリの選択を追加" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
 ---
@@ -829,7 +829,7 @@ Expected: PASS
 
 ```bash
 git add internal/config
-git commit -m "feat: forwards の短縮記法と詳細記法を解釈する"
+git commit -m "feat: forwards の短縮記法と詳細記法を解釈する" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
 ---
@@ -1655,7 +1655,7 @@ Expected: PASS
 ```bash
 go mod tidy
 git add go.mod go.sum internal/config
-git commit -m "feat: 設定ファイルを読み込み、正規化する"
+git commit -m "feat: 設定ファイルを読み込み、正規化する" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
 ---
@@ -1809,7 +1809,7 @@ Expected: PASS（Task 4 のテストも含めて）
 
 ```bash
 git add internal/config
-git commit -m "feat: include で設定ファイルを分割できるようにする"
+git commit -m "feat: include で設定ファイルを分割できるようにする" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
 ---
@@ -2160,7 +2160,7 @@ Expected: PASS
 
 ```bash
 git add internal/config
-git commit -m "feat: 環境の名前空間と via の経路を解決する"
+git commit -m "feat: 環境の名前空間と via の経路を解決する" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
 ---
@@ -2487,7 +2487,7 @@ Expected: PASS（全テスト）
 
 ```bash
 git add internal/config
-git commit -m "feat: 設定の参照・循環・衝突・ポート重複を検証する"
+git commit -m "feat: 設定の参照・循環・衝突・ポート重複を検証する" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
 ---
@@ -2653,7 +2653,7 @@ Expected: PASS
 
 ```bash
 git add internal/config
-git commit -m "feat: 設定ファイルを探索する"
+git commit -m "feat: 設定ファイルを探索する" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
 ---
@@ -2860,7 +2860,7 @@ Expected: PASS
 
 ```bash
 git add internal/driver
-git commit -m "feat: ssh コマンドを組み立てるドライバを追加"
+git commit -m "feat: ssh コマンドを組み立てるドライバを追加" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
 ---
@@ -3215,7 +3215,7 @@ Expected: PASS
 
 ```bash
 git add internal/cli
-git commit -m "feat: validate と cmd コマンドを追加"
+git commit -m "feat: validate と cmd コマンドを追加" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
 ---
@@ -3769,7 +3769,7 @@ Expected: PASS（6 テスト）
 
 ```bash
 git add internal/platform internal/supervisor internal/testutil
-git commit -m "feat: 子プロセスを起動・監視・停止するスーパーバイザを追加"
+git commit -m "feat: 子プロセスを起動・監視・停止するスーパーバイザを追加" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
 ---
@@ -4079,7 +4079,7 @@ Expected: PASS（全パッケージ）
 
 ```bash
 git add internal/cli
-git commit -m "feat: up コマンドを追加（protected の確認、ポートチェック、Ctrl-C で全停止）"
+git commit -m "feat: up コマンドを追加（protected の確認、ポートチェック、Ctrl-C で全停止）" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
 ---
@@ -4209,6 +4209,11 @@ ENTRYPOINT ["/bin/sh", "/e2e/scenario.sh"]
 `test/e2e/hashigo.yaml`:
 
 ```yaml
+# WSL 上の Docker ではコンテナの /proc/version にも microsoft が入り、WSL と誤判定される。
+# コンテナ内では Linux 版 ssh を使うので native に固定する。
+wsl:
+  mode: native
+
 hosts:
   bastion: { host: bastion, user: hashigo }
   mid:     { host: mid, user: hashigo, via: bastion }
@@ -4342,12 +4347,13 @@ Expected: `OK: 15432 で db に届いた`、`OK: 25432 で db に届いた`、`E
 うまくいかないときの確認点:
 - `sshd が起動しない`: `docker compose logs bastion mid ap` で sshd のエラーを見る（authorized_keys の権限、ユーザーのロックなど）
 - `db に届かない`: `/tmp/up.log` の `[two-hop]` の行に出ている ssh のエラーを見る。`hashigo cmd` の出力を client で手で実行して切り分ける
+- `ssh.exe が見つかりません` や `relay モードは安定化フェーズで対応します` が出る: WSL 上の Docker で、コンテナが WSL と誤判定されている。`hashigo.yaml` に `wsl.mode: native` があるか確認する
 
 - [ ] **Step 4: Commit**
 
 ```bash
 git add test/e2e
-git commit -m "test: Docker で2段・3段のフォワードと停止時の後始末を確認する E2E を追加"
+git commit -m "test: Docker で2段・3段のフォワードと停止時の後始末を確認する E2E を追加" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
 ---
@@ -4460,7 +4466,7 @@ Expected: すべて PASS
 
 ```bash
 git add .github README.md
-git commit -m "ci: 3 OS のテストと E2E を追加し、README に使い方を書く"
+git commit -m "ci: 3 OS のテストと E2E を追加し、README に使い方を書く" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
 - [ ] **Step 5: 実機での受け入れ確認（ユーザーと一緒に行う）**
@@ -4481,5 +4487,5 @@ WSL の実環境で、spec の 12章 #6 と MVP の前提を確認する。設�
 
 ```bash
 git add docs/superpowers/specs/2026-10-23-hashigo-design.md
-git commit -m "docs: MVP の実機確認の結果を設計書に追記"
+git commit -m "docs: MVP の実機確認の結果を設計書に追記" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
