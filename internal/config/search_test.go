@@ -39,7 +39,7 @@ func searchHost(env map[string]string, exists ...string) *platform.Host {
 		HomeDir: func() (string, error) { return "/home/u", nil },
 		Run: mapRunner{
 			"cmd.exe /c echo %USERPROFILE%": "C:\\Users\\taro\r\n",
-			"wslpath -u C:\\Users\\taro":     "/mnt/c/Users/taro\n",
+			"wslpath -u C:\\Users\\taro":    "/mnt/c/Users/taro\n",
 		},
 	}
 }
