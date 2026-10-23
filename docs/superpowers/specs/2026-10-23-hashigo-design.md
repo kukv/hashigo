@@ -39,7 +39,7 @@ config ──▶ driver ──▶ supervisor ──▶ 子プロセス (ssh / aw
 cmd/hashigo/            main
 internal/cli/           cobra のコマンド定義（薄く保つ）
 internal/config/        読み込み、include、正規化、名前解決、validate
-internal/driver/        Driver インターフェース、ssh/、ecs/
+internal/driver/        Driver インターフェース、ssh/、ecs/、relay/（relay モードの書き換え）
 internal/supervisor/    スロット、状態遷移、バックオフ、ヘルスチェック
 internal/state/         状態ファイルの読み書き、残骸の判定
 internal/platform/      OS / WSL 判定、パス変換、relay、後始末、proc_{unix,windows}.go
@@ -364,7 +364,7 @@ backoff(n) ←─┘   → failed(理由)   ← Fatal、または reconnect: fal
 ### 6.4 mirrored と relay
 
 - **mirrored**: ssh.exe が Windows 側の `127.0.0.1` で待ち受け、WSL からもそのまま届く。手を加えない
-- **relay**: platform 層がドライバの出力を書き換える（`Wrap(specs) → specs + 補助スロット`）
+- **relay**: `internal/driver/relay` がドライバの出力を書き換える（`Wrap(specs) → specs + 補助スロット`）。ゲートウェイ IP の取得など OS に依存する部分は platform 層が受け持つ（depguard で platform から driver を参照できないため）
   - ssh.exe の待ち受けアドレスを、WSL から見たデフォルトゲートウェイ（Windows 側の WSL 用仮想 NIC）の IP にする。`0.0.0.0` にはしないので、LAN には公開されない。この IP は再起動で変わるため、`Prepare` のたびに `ip route` から取り直す
   - ローカルポートごとに socat の補助スロットを追加する: `socat TCP-LISTEN:<port>,bind=127.0.0.1,reuseaddr,fork TCP:<gatewayIP>:<port>`。補助スロットもスーパーバイザが監視・再起動する
   - 起動後に `powershell.exe Get-NetTCPConnection` で Windows 側の待ち受けアドレスを確認し、`0.0.0.0` や `::` なら警告する
