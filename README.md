@@ -1,5 +1,7 @@
 # hashigo
 
+<p align="center"><img src="docs/assets/hashigo_2.png" width="420" alt="octoscope"></p>
+
 [日本語](README.ja.md)
 
 A CLI that starts, stops, and monitors YAML-defined port forwards through multi-hop SSH
