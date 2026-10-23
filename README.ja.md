@@ -1,5 +1,7 @@
 # hashigo
 
+<p align="center"><img src="docs/assets/hashigo_2.png" width="420" alt="hashigo"></p>
+
 [English](README.md)
 
 YAML に定義したポートフォワードを、多段の SSH 踏み台や AWS SSM を経由して、まとめて起動・停止・監視する CLI です。
