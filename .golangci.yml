@@ -27,6 +27,8 @@ linters:
               desc: platform はスーパーバイザを知らない
             - pkg: github.com/kukv/hashigo/internal/cli
               desc: platform は CLI を知らない
+            - pkg: github.com/kukv/hashigo/internal/state
+              desc: platform は状態ファイルを知らない
         # config は読み込みと検証だけを行い、プロセスの起動を知らない。
         config-layer:
           files:
@@ -56,6 +58,19 @@ linters:
               desc: supervisor は設定ファイルを知らない。組み立ては driver が行う
             - pkg: github.com/kukv/hashigo/internal/cli
               desc: supervisor は CLI を知らない
+        # state は状態ファイルの読み書きだけを行う葉である。
+        state-layer:
+          files:
+            - "**/internal/state/**"
+          deny:
+            - pkg: github.com/kukv/hashigo/internal/config
+              desc: state は設定ファイルを知らない
+            - pkg: github.com/kukv/hashigo/internal/driver
+              desc: state はドライバを知らない
+            - pkg: github.com/kukv/hashigo/internal/supervisor
+              desc: state はスーパーバイザを知らない
+            - pkg: github.com/kukv/hashigo/internal/cli
+              desc: state は CLI を知らない
         # テスト用のヘルパーは、テストされる側のパッケージを知らない。
         testutil:
           files:
@@ -106,6 +121,11 @@ linters:
         linters:
           - gosec
         text: "G204"
+      # 状態ファイルのディレクトリは StateDir で決めた本人の場所で、読むのはそこにある *.json だけである。
+      - path: internal/state/state\.go
+        linters:
+          - gosec
+        text: "G304"
 
 issues:
   max-issues-per-linter: 0
