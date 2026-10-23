@@ -18,6 +18,9 @@ func main() {
 		Stdout: os.Stdout,
 		Stderr: os.Stderr,
 		IsTTY:  func() bool { return term.IsTerminal(int(os.Stdin.Fd())) },
+		StdoutTTY: func() bool {
+			return term.IsTerminal(int(os.Stdout.Fd())) && platform.EnableVT(os.Stdout)
+		},
 	}
 	os.Exit(cli.Run(context.Background(), d, os.Args[1:]))
 }
