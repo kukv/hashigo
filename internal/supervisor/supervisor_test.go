@@ -28,6 +28,7 @@ func (d staticDriver) Preview() []driver.ProcessSpec { return d.specs }
 func (d staticDriver) Prepare(context.Context) ([]driver.ProcessSpec, error) {
 	return d.specs, nil
 }
+func (d staticDriver) Classify(error, []byte) driver.Exit { return driver.Exit{} }
 
 func fakeUnit(id string, port int, env ...string) Unit {
 	sp := driver.ProcessSpec{
