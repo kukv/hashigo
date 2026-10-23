@@ -6,13 +6,14 @@ YAML に定義したポートフォワードを、多段の SSH 踏み台や AWS
 
 hashigo（梯子）は、踏み台を一段ずつ登る作業を代わりに行います。SSH 自体は実装していません。手元の `ssh` を子プロセスとして起動し、`-J` と `-L` を組み立てて渡すだけです。そのため、`~/.ssh/config`、`ProxyJump`、`ssh-agent`、鍵はそのまま使えます。WSL では Windows の `ssh.exe` を使うので、鍵と設定は Windows 側に置いたままにでき、WSL を作り直しても影響を受けません。
 
-> **状態: MVP。** フォアグラウンドの `up`（Ctrl-C で停止）、`cmd`、`validate` が動きます。再接続、`status`、`doctor`、ECS（SSM）のフォワード、WSL の relay モードは次のフェーズで対応します（[ロードマップ](#ロードマップ)）。
+> **状態: 安定化。** 再接続、ヘルスチェック、`status`、`doctor`、ECS（SSM）のフォワード、WSL の relay モード、Windows ネイティブに対応しています。実機での確認の手順は [docs/acceptance.md](docs/acceptance.md) にあります。
 
 ## 必要なもの
 
 - OpenSSH: Linux と macOS では `ssh`、Windows と WSL では `ssh.exe`（Windows 版 OpenSSH）
 - 対話なしで使える鍵（ssh-agent か、パスフレーズのない鍵）。hashigo は `ssh` を `BatchMode=yes` で動かすため、パスフレーズやホスト鍵の確認には答えられません。最初に一度、`ssh <host>` を手で実行してホスト鍵を登録しておいてください。
-- WSL では mirrored ネットワーク（`%UserProfile%\.wslconfig` に `networkingMode=mirrored`）。使えない場合は `wsl.mode: native` を指定して、Linux 版の `ssh` を使います。
+- WSL では mirrored ネットワーク（`%UserProfile%\.wslconfig` に `networkingMode=mirrored`）を推奨します。NAT のままなら relay モードになり、WSL 側に `socat` が必要です。`wsl.mode: native` を指定すると Linux 版の `ssh` を使います。
+- ECS のトンネルには `aws`（WSL では `aws.exe`）と `session-manager-plugin`、ECS Exec が有効なサービスが必要です。
 
 ## インストール
 
@@ -96,12 +97,28 @@ groups:
 | キー | 置ける場所 | 内容 |
 |---|---|---|
 | `include` | トップレベル | 一緒に読み込むファイル。読み込んだファイルからの相対パス |
-| `defaults` | トップレベル | `ssh`（`auto` / `ssh` / `ssh.exe` / パス）、`keepalive`（既定 `30s`）など、下の階層に継承する設定 |
+| `defaults` | トップレベル | `ssh`（`auto` / `ssh` / `ssh.exe` / パス）、`ssh_config` と `aws_config`（`auto` / `windows` / `wsl` / パス）、`aws`、`keepalive`（既定 `30s`）、`reconnect`（既定 `true`）。下の階層に継承する |
 | `wsl.mode` | トップレベル | `auto`（既定）、`mirrored`、`relay`、`native` |
 | `hosts.<名前>` | トップレベル、環境 | `host`（必須）、`user`、`via` |
-| `tunnels.<名前>` | トップレベル、環境 | `via` か `host`（どちらか一方）、`forwards`、`keepalive`、`ssh` |
+| `tunnels.<名前>` | トップレベル、環境 | ssh: `via` か `host`（どちらか一方）、`forwards`、`hostname`、`keepalive`、`ssh`、`ssh_config`。ECS: `type: ecs`、`cluster`、`service`、`container`、`forwards`、`profile`、`region`、`aws`、`aws_config` |
 | `groups.<名前>` | トップレベル | `環境.名前`、環境名、トップレベルのトンネル名の一覧 |
 | `environments.<名前>` | トップレベル | `protected`、`hosts`、`tunnels`、その環境のトンネルに継承する設定 |
+
+ECS のトンネルは SSM Session Manager（ECS Exec）でつなぎます。タスク ID は接続のたびに引き直します。
+
+```yaml
+environments:
+  stg:
+    aws: { profile: stg }            # 環境内の ECS トンネルに継承する
+    tunnels:
+      db:
+        type: ecs
+        region: ap-northeast-1
+        cluster: stg-cluster
+        service: api
+        container: app
+        forwards: ["35432:stg-db.internal:5432"]
+```
 
 フォワードは、アドレスを指定しない限り `127.0.0.1` で待ち受けます。`hashigo validate` は、未知のキー、存在しない参照、`via` の循環、環境をまたいだローカルポートの重複などを、`ファイル:行:列` 付きですべて報告します。
 
@@ -111,28 +128,32 @@ groups:
 
 ```sh
 hashigo validate                 # 設定を検証する
-hashigo cmd prod-db              # 実行する ssh コマンドを表示する
+hashigo cmd prod-db              # 実行する ssh / aws コマンドを表示する
 hashigo up prod-db               # トンネルを起動する。Ctrl-C で全部止まる
 hashigo up dev                   # 環境内の全トンネル
 hashigo up dev prod              # 複数をまとめて
 hashigo up dev.db                # 環境内の1本だけ
 hashigo up all-db --yes          # protected 環境の確認を省略する
+hashigo status                   # 状態を表示する（全部 up なら終了コード 0）
+hashigo doctor                   # 実行環境と設定の前提を確かめる
 hashigo version
 ```
 
 対象は `環境.名前` → 環境名 → グループ名 → トップレベルのトンネル名 の順に照合します。どのコマンドも `--config <path>` を受け付けます。
 
-`up` はフォアグラウンドで動きます。ローカルポートがすでに使われていると、起動しません。途中でトンネルが終了したら、それを表示し、ほかのトンネルは動かし続けます。Ctrl-C、SIGTERM、端末を閉じることのどれでも、起動した `ssh` をすべて止めます。
+`up` はフォアグラウンドで動きます。ローカルポートがすでに使われていると起動せず、使っている相手（別の `hashigo up` か、hashigo 外のプロセスか）を表示します。トンネルが切れたら、1s → 2s → 4s … 最大 60s の間隔で張り直します（`reconnect: false` なら張り直しません）。10 秒ごとにローカルポートへの接続を確かめ、つながらなければ `unhealthy` と表示します。SSO の期限切れのように張り直しても直らない失敗は、`aws sso login` などの案内を出して止めます。Ctrl-C、SIGTERM、端末を閉じることのどれでも、起動したプロセスをすべて止めます。WSL では、Windows 側に残った `ssh.exe` / `aws.exe` も片付けます。
+
+`status` は、`up` が書く状態ファイル（`~/.local/state/hashigo/run/`、Windows は `%LOCALAPPDATA%\hashigo\run\`）と TCP 接続で、トンネルごとの状態、再接続の回数、最後のエラーを表示します。`doctor` は、WSL のネットワークモード、ssh / aws / session-manager-plugin / socat の有無、AWS の認証、ポートの衝突、実際に読む config、鍵ファイル、hosts の設定漏れ（`hostname` を書いたトンネル）、relay の LAN 公開を確かめます。
 
 ## ロードマップ
 
 | フェーズ | 内容 |
 |---|---|
-| MVP（現在） | `validate`、`cmd`、フォアグラウンドの `up`、environments と `include`、WSL の `ssh.exe`（mirrored） |
-| 安定化 | 指数バックオフでの再接続、ヘルスチェック、`status`、`doctor`、ECS（SSM）のフォワード、WSL の relay モード、`ssh_config` / `aws_config` の切り替え、Windows ネイティブ |
+| MVP | `validate`、`cmd`、フォアグラウンドの `up`、environments と `include`、WSL の `ssh.exe`（mirrored） |
+| 安定化（現在） | 指数バックオフでの再接続、ヘルスチェック、`status`、`doctor`、ECS（SSM）のフォワード、WSL の relay モード、`ssh_config` / `aws_config` の切り替え、Windows ネイティブ |
 | 拡張 | `up -d` / `down` / `logs`、`-R` と `-D` のフォワード、シェル補完 |
 
-詳しくは [設計書](docs/superpowers/specs/2026-10-23-hashigo-design.md) を参照してください。後のフェーズで使う設定キー（`type: ecs`、`ssh_config`、`aws` など）はすでに書けます。まだ対応していないものは、`up` / `cmd` がそのことをエラーで伝えます。
+詳しくは [設計書](docs/superpowers/specs/2026-10-23-hashigo-design.md) を参照してください。
 
 ## 開発に参加する
 

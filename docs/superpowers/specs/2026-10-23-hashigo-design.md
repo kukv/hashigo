@@ -195,6 +195,7 @@ environments:
 - 短縮記法: `ローカルポート:宛先ホスト:宛先ポート`（例: `15432:db.internal:5432`）
 - 詳細記法: `{ local: 15432 | "127.0.0.1:15432", remote: "db.internal:5432" }`
 - 待ち受けアドレスの既定は `127.0.0.1`
+- `type: ecs` の forwards には待ち受けアドレスを書けない（SSM の `localPortNumber` は 127.0.0.1 で待ち受けるため。validate エラー）
 
 ### 3.5 正規化と名前解決
 
@@ -298,6 +299,8 @@ ECS のコンテナには sshd が無いため、SSM Session Manager（ECS Exec�
 
 あるスロットが終了したときは、そのスロットだけを張り直す。張り直すときは `Prepare` を呼び直し、同じ位置の Spec を使う。ECS の片方のポートがアイドルタイムアウトで切れても、もう片方は止まらない。
 
+スロットの数と並びは `Preview()` で決める。起動直後も含め、各スロットは接続のたびに自分で `Prepare` を呼ぶ（ECS で forward が N 本なら、起動時の list-tasks も N 回になる）。
+
 ### 5.2 状態遷移
 
 ```
@@ -309,6 +312,7 @@ backoff(n) ←─┘   → failed(理由)   ← Fatal、または reconnect: fal
 
 - **再接続**: 1s → 2s → 4s → … と倍にしていき、上限は 60s。60 秒以上安定して動いたら 1s に戻す。`reconnect: false` なら終了時に failed にする
 - **ヘルスチェック**: 10 秒ごとに各ローカルポートへ TCP 接続する（タイムアウト 2 秒）。失敗したら unhealthy として表示するだけで、プロセスは kill しない
+- **起動できないとき**: 子プロセスを起動できない（バイナリが無いなど）ときは、再接続せずに failed にする
 - **MVP での動き**: 再接続とヘルスチェックは安定化フェーズで入れる。MVP では、プロセスが終了したらそのスロットを failed にし、他のスロットは動かし続ける。停止の指示が無いまま全スロットが終了したら、`up` は終了コード 1 で終わる
 
 ### 5.3 起動前のチェック
@@ -395,11 +399,12 @@ WSL 側のプロセスを止めても、Windows 側の `ssh.exe` が残る前提
 - 状態が変わったときと、ヘルスチェックのたびに書く。一時ファイルに書いて rename する
 - 正常終了したら削除する
 - **残骸の判定**: 記録された pid が生きていない、または pid の起動時刻が `started_at` と一致しない（pid が再利用された）場合は残骸とみなし、無視して削除する
+- `started_at` には、OS から取ったプロセスの起動時刻（8章）を書き、残骸の判定では同じ方法で取った値と 1 秒以内かで比べる
 - 拡張フェーズの `up -d` / `down` / `logs` は、このファイルをそのまま使う
 
 ### 7.2 `hashigo status [対象...]`
 
-設定にある全トンネル（引数があればそれに絞る）を、スロットごとに1行で表示する。
+設定にある全トンネル（引数があればそれに絞る）を表示する。状態ファイルがあるトンネルはスロットごとに1行、無いトンネルはトンネルごとに1行（ポートをまとめて表示）にする。
 
 | 環境 | トンネル | ポート | 状態 | 再接続 | 最終エラー |
 |---|---|---|---|---|---|
@@ -523,7 +528,19 @@ cobra で作る。全コマンド共通のフラグは `--config <path>` だけ�
 | 6 | 3段以上の `-J` と、DB へのログイン（計画書の確認事項1で未確認の部分） | MVP: 受け入れ確認 | 失敗したら `ProxyCommand` 方式を検討する |
 | 7 | WSL 上の Docker コンテナでは `/proc/version` に `microsoft` が入り、WSL と誤判定される（E2E では `wsl.mode: native` で回避） | 安定化: WSL 判定の見直し | `/proc/version` だけで判定せず、`WSL_DISTRO_NAME` / `WSL_INTEROP` または `/proc/sys/fs/binfmt_misc/WSLInterop` の存在も条件にする |
 
-MVP の実機受け入れ（プラン Task 14 Step 5）は未実施（2026-10-23 時点）。実機の踏み台を用意できる環境で、WSL mirrored モードを前提に実施する。そのとき、Ctrl-C のあとに Windows 側の `ssh.exe` が残らないこと（#1）を合否の項目にする。残る場合は、6.5 の taskkill による後始末を MVP に前倒しする。
+安定化プラン（`docs/superpowers/plans/2026-10-23-hashigo-stabilization.md`）での扱い:
+
+| # | 扱い |
+|---|---|
+| 1 | 結果によらず、WSL で .exe を使ったときは停止後に 6.5 の後始末を必ず行う。実機の確認は `docs/acceptance.md` 1-3 |
+| 2 | 設計どおり UNC パスの `-F` で実装した。実機の確認は `docs/acceptance.md` 4-1 |
+| 3 | 設計どおり `WSLENV` の `/p` で実装した。実機の確認は `docs/acceptance.md` 4-2 |
+| 4 | 届かない側（保守的な側）を選び、ECS トンネルを relay で起動しようとしたらエラーにして mirrored を案内する。doctor でも ✗ にする。実機の確認は `docs/acceptance.md` 6-7 |
+| 5 | `docs/acceptance.md` 6-3、6-4 で確認する |
+| 6 | `docs/acceptance.md` 1-2 で確認する |
+| 7 | `WSL_DISTRO_NAME` / `WSL_INTEROP` があるか、`/proc/version` に microsoft があり `/proc/sys/fs/binfmt_misc/WSLInterop` もある場合だけ WSL とみなすように直した |
+
+MVP の実機受け入れ（プラン Task 14 Step 5）は未実施（2026-10-23 時点）。実機の踏み台を用意できる環境で、WSL mirrored モードを前提に実施する。そのとき、Ctrl-C のあとに Windows 側の `ssh.exe` が残らないこと（#1）を合否の項目にする。残る場合は、6.5 の taskkill による後始末を MVP に前倒しする。手順は `docs/acceptance.md` の 1 章にまとめた。
 
 ユーザー側で用意・判断するもの:
 
