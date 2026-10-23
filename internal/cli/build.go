@@ -35,8 +35,6 @@ func (b builtUnit) unit() supervisor.Unit {
 }
 
 // buildUnits はトンネルごとにドライバを組み立てる。2つ目の戻り値は WSL のモード（WSL でなければ ""）。
-//
-//nolint:unparam // WSL のモードは後続のタスクの呼び出し側が使う
 func (a *app) buildUnits(ctx context.Context, cfg *config.Config, tunnels []*config.Tunnel) ([]builtUnit, string, error) {
 	mode, err := a.d.Host.ResolveWSLMode(ctx, cfg.WSLMode)
 	if err != nil {

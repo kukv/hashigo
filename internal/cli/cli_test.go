@@ -16,10 +16,17 @@ import (
 )
 
 // testHost は WSL ではない Linux として振る舞う Host。ファイルの存在確認だけは本物を使う。
-func testHost() *platform.Host {
+// 状態ファイルはテストごとの一時ディレクトリに書く。
+func testHost(t testing.TB) *platform.Host {
+	stateHome := t.TempDir()
 	return &platform.Host{
-		GOOS:     "linux",
-		Getenv:   func(string) string { return "" },
+		GOOS: "linux",
+		Getenv: func(k string) string {
+			if k == "XDG_STATE_HOME" {
+				return stateHome
+			}
+			return ""
+		},
 		ReadFile: func(string) ([]byte, error) { return nil, fs.ErrNotExist },
 		LookPath: func(name string) (string, error) {
 			switch name {
@@ -48,7 +55,7 @@ func writeConfig(t *testing.T, content string) string {
 func run(t *testing.T, args ...string) (int, string, string) {
 	t.Helper()
 	var out, errOut bytes.Buffer
-	d := Deps{Host: testHost(), Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errOut, IsTTY: func() bool { return false }}
+	d := Deps{Host: testHost(t), Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errOut, IsTTY: func() bool { return false }}
 	code := Run(context.Background(), d, args)
 	return code, out.String(), errOut.String()
 }
@@ -122,14 +129,22 @@ func (m mapRunner) Output(_ context.Context, name string, args ...string) ([]byt
 	return []byte(out), nil
 }
 
+// funcRunner は呼び出しを関数で受ける Runner。
+type funcRunner func(name string, args []string) ([]byte, error)
+
+func (f funcRunner) Output(_ context.Context, name string, args ...string) ([]byte, error) {
+	return f(name, args)
+}
+
 // wslHost は NAT モードの WSL として振る舞う Host。
-func wslHost(paths map[string]string) *platform.Host {
-	h := testHost()
+func wslHost(t testing.TB, paths map[string]string) *platform.Host {
+	h := testHost(t)
+	base := h.Getenv
 	h.Getenv = func(k string) string {
 		if k == "WSL_DISTRO_NAME" {
 			return "Ubuntu"
 		}
-		return ""
+		return base(k)
 	}
 	h.LookPath = func(name string) (string, error) {
 		if p, ok := paths[name]; ok {
@@ -189,7 +204,7 @@ func TestCmdSSHConfig(t *testing.T) {
 
 func TestCmdRelay(t *testing.T) {
 	p := writeConfig(t, "tunnels:\n  db: { host: ap, forwards: [\"15432:db:5432\"] }\n")
-	h := wslHost(map[string]string{"ssh.exe": "/mnt/c/WINDOWS/System32/OpenSSH/ssh.exe", "socat": "/usr/bin/socat"})
+	h := wslHost(t, map[string]string{"ssh.exe": "/mnt/c/WINDOWS/System32/OpenSSH/ssh.exe", "socat": "/usr/bin/socat"})
 	code, out, errOut := runWith(t, h, "cmd", "--config", p, "db")
 	if code != 0 {
 		t.Fatalf("code=%d stderr=%s", code, errOut)
@@ -208,13 +223,13 @@ func TestCmdRelay(t *testing.T) {
 
 func TestCmdRelayErrors(t *testing.T) {
 	p := writeConfig(t, "tunnels:\n  db: { host: ap, forwards: [\"15432:db:5432\"] }\n")
-	h := wslHost(map[string]string{"ssh.exe": "/mnt/c/WINDOWS/System32/OpenSSH/ssh.exe"})
+	h := wslHost(t, map[string]string{"ssh.exe": "/mnt/c/WINDOWS/System32/OpenSSH/ssh.exe"})
 	if code, _, errOut := runWith(t, h, "cmd", "--config", p, "db"); code != 1 || !strings.Contains(errOut, "socat が必要です") {
 		t.Errorf("socat が無ければエラー: code=%d %s", code, errOut)
 	}
 
 	p = writeConfig(t, cmdYAML)
-	h = wslHost(map[string]string{"aws.exe": "/mnt/c/aws.exe", "socat": "/usr/bin/socat"})
+	h = wslHost(t, map[string]string{"aws.exe": "/mnt/c/aws.exe", "socat": "/usr/bin/socat"})
 	if code, _, errOut := runWith(t, h, "cmd", "--config", p, "task"); code != 1 || !strings.Contains(errOut, "relay モードでは使えません") {
 		t.Errorf("ECS × relay はエラー: code=%d %s", code, errOut)
 	}
