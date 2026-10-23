@@ -27,6 +27,14 @@ func TestE2E(t *testing.T) {
 		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 		_ = cmd.Run()
 	})
-	run(t, nil, "docker", "compose", "build")
-	run(t, nil, "docker", "compose", "run", "--rm", "client")
+	compose := func(args ...string) { run(t, nil, "docker", append([]string{"compose"}, args...)...) }
+	scenario := func(phase string) { compose("exec", "-T", "client", "sh", "/e2e/scenario.sh", phase) }
+
+	compose("build")
+	compose("up", "-d", "client")
+	scenario("start")
+	// ap を再起動し、ap を経由する three-hop だけが切れて張り直されることを確かめる
+	compose("restart", "ap")
+	scenario("reconnect")
+	scenario("stop")
 }

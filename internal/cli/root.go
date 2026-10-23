@@ -15,11 +15,12 @@ import (
 
 // Deps はコマンドが使う外部とのつなぎ目。テストで差し替える。
 type Deps struct {
-	Host   *platform.Host
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
-	IsTTY  func() bool
+	Host      *platform.Host
+	Stdin     io.Reader
+	Stdout    io.Writer
+	Stderr    io.Writer
+	IsTTY     func() bool // stdin が端末か（protected の確認に使う）
+	StdoutTTY func() bool // stdout が色を出せる端末か。nil なら端末ではない
 }
 
 type app struct {
@@ -41,14 +42,19 @@ func Run(ctx context.Context, d Deps, args []string) int {
 	root.SetIn(d.Stdin)
 	root.SetOut(d.Stdout)
 	root.SetErr(d.Stderr)
-	root.AddCommand(newVersionCmd(), a.validateCmd(), a.cmdCmd(), a.upCmd())
+	root.AddCommand(newVersionCmd(), a.validateCmd(), a.cmdCmd(), a.upCmd(), a.statusCmd(), a.doctorCmd())
 
 	if err := root.ExecuteContext(ctx); err != nil {
-		printError(d.Stderr, err)
+		if !errors.Is(err, errQuiet) {
+			printError(d.Stderr, err)
+		}
 		return 1
 	}
 	return 0
 }
+
+// errQuiet は、結果を出力済みで、終了コード 1 だけを返すときのエラー。
+var errQuiet = errors.New("終了コード 1")
 
 func printError(w io.Writer, err error) {
 	var multi interface{ Lines() []string }

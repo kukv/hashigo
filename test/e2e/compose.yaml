@@ -36,6 +36,7 @@ services:
     build:
       context: .
       dockerfile: client/Dockerfile
+    init: true
     depends_on: [bastion, mid, ap, db]
     volumes: [keys:/keys:ro]
     networks: [front]

@@ -1,3 +1,7 @@
+# ap の再起動で切れたことを早く検知するため、keepalive を短くする
+defaults:
+  keepalive: 5s
+
 # WSL 上の Docker ではコンテナの /proc/version にも microsoft が入り、WSL と誤判定される。
 # コンテナ内では Linux 版 ssh を使うので native に固定する。
 wsl:

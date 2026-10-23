@@ -162,6 +162,11 @@ func (v *validator) tunnels() {
 					v.add(t.Src.child(x.k), "%s は type: ssh でだけ使えます", x.k)
 				}
 			}
+			for i, f := range t.Forwards {
+				if f.Bind != defaultBind {
+					v.add(t.Src.child("forwards", i), "type: ecs の forwards には待ち受けアドレスを書けません（SSM は 127.0.0.1 で待ち受けます）: %q", f.Bind)
+				}
+			}
 		default:
 			v.add(t.Src.child("type"), "type は ssh か ecs です: %q", t.Type)
 		}

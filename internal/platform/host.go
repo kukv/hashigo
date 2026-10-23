@@ -2,9 +2,11 @@
 package platform
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -20,11 +22,45 @@ type Runner interface {
 	Output(ctx context.Context, name string, args ...string) ([]byte, error)
 }
 
-// ExecRunner は os/exec で実際に実行する Runner。
-type ExecRunner struct{}
+// RunOptions は外部コマンドの実行方法。
+type RunOptions struct {
+	Env         []string // 追加する環境変数（KEY=VALUE）
+	Interactive bool     // 端末の stdin と stderr をつなぐ（MFA の入力など）
+	Combined    bool     // stderr も出力に含める（ssh -V など）
+}
 
-func (ExecRunner) Output(ctx context.Context, name string, args ...string) ([]byte, error) {
-	return exec.CommandContext(ctx, name, args...).Output()
+// ExecRunner は os/exec で実際に実行する Runner。ゼロ値は stdout だけを返す。
+type ExecRunner struct{ Opts RunOptions }
+
+func (r ExecRunner) Output(ctx context.Context, name string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	if len(r.Opts.Env) > 0 {
+		cmd.Env = append(os.Environ(), r.Opts.Env...)
+	}
+	var errBuf bytes.Buffer
+	if r.Opts.Interactive {
+		// 端末にも出しつつ、エラー表示用に stderr を手元にも残す。
+		// cmd.Stderr を設定すると ExitError.Stderr が埋まらないため。
+		cmd.Stdin, cmd.Stderr = os.Stdin, io.MultiWriter(os.Stderr, &errBuf)
+	}
+	if r.Opts.Combined {
+		return cmd.CombinedOutput()
+	}
+	out, err := cmd.Output()
+	var ee *exec.ExitError
+	if errors.As(err, &ee) && len(ee.Stderr) == 0 {
+		ee.Stderr = errBuf.Bytes()
+	}
+	return out, err
+}
+
+// ErrText は外部コマンドのエラーを表示用の文字列にする。stderr が取れていればその中身を返す。
+func ErrText(err error) string {
+	var ee *exec.ExitError
+	if errors.As(err, &ee) && len(bytes.TrimSpace(ee.Stderr)) > 0 {
+		return strings.TrimSpace(strings.ReplaceAll(string(ee.Stderr), "\r", ""))
+	}
+	return err.Error()
 }
 
 // Host は実行環境への窓口。テストでは各関数を差し替える。
@@ -36,6 +72,7 @@ type Host struct {
 	Stat     func(string) (fs.FileInfo, error)
 	HomeDir  func() (string, error)
 	Run      Runner
+	RunWith  func(RunOptions) Runner // nil なら Run を使う
 
 	winHome string // WindowsHome の結果を覚えておく
 }
@@ -50,19 +87,44 @@ func Detect() *Host {
 		Stat:     os.Stat,
 		HomeDir:  os.UserHomeDir,
 		Run:      ExecRunner{},
+		RunWith:  func(o RunOptions) Runner { return ExecRunner{Opts: o} },
 	}
 }
 
+// Runner は o の実行方法で動く Runner を返す。RunWith が無ければ Run を返す（テスト用）。
+func (h *Host) Runner(o RunOptions) Runner {
+	if h.RunWith != nil {
+		return h.RunWith(o)
+	}
+	return h.Run
+}
+
+var wslInterop = []string{"/proc/sys/fs/binfmt_misc/WSLInterop", "/proc/sys/fs/binfmt_misc/WSLInterop-late"}
+
 // IsWSL は WSL 上で動いているかを返す。
+// WSL 上の Docker コンテナでも /proc/version に microsoft が入るため、/proc/version だけでは判定しない。
 func (h *Host) IsWSL() bool {
 	if h.GOOS != "linux" {
 		return false
 	}
-	if h.Getenv("WSL_DISTRO_NAME") != "" {
+	if h.Getenv("WSL_DISTRO_NAME") != "" || h.Getenv("WSL_INTEROP") != "" {
 		return true
 	}
 	b, err := h.ReadFile("/proc/version")
-	return err == nil && strings.Contains(strings.ToLower(string(b)), "microsoft")
+	if err != nil || !strings.Contains(strings.ToLower(string(b)), "microsoft") {
+		return false
+	}
+	for _, p := range wslInterop {
+		if _, err := h.Stat(p); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// CrossesToWindows は、WSL 上で Windows のバイナリ（.exe）を実行するかを返す。
+func (h *Host) CrossesToWindows(bin string) bool {
+	return h.IsWSL() && strings.HasSuffix(strings.ToLower(bin), ".exe")
 }
 
 // WindowsHome は Windows のユーザーホームを WSL 形式のパスで返す。
@@ -122,30 +184,44 @@ func (h *Host) ResolveWSLMode(ctx context.Context, setting string) (string, erro
 	return "", fmt.Errorf("wsl.mode は auto / mirrored / relay / native のいずれかです: %q", setting)
 }
 
-const windowsSSH = "/mnt/c/Windows/System32/OpenSSH/ssh.exe"
+const (
+	windowsSSH = "/mnt/c/Windows/System32/OpenSSH/ssh.exe"
+	windowsAWS = "/mnt/c/Program Files/Amazon/AWSCLIV2/aws.exe"
+)
 
 // SSHBinary は ssh の設定値と WSL のモードから、実行する ssh のパスを決める。
 func (h *Host) SSHBinary(setting, wslMode string) (string, error) {
+	return h.binary("ssh", windowsSSH, setting, wslMode)
+}
+
+// AWSBinary は aws の設定値と WSL のモードから、実行する aws のパスを決める。
+func (h *Host) AWSBinary(setting, wslMode string) (string, error) {
+	return h.binary("aws", windowsAWS, setting, wslMode)
+}
+
+// binary は auto なら WSL（native 以外）で <kind>.exe、それ以外で <kind> を PATH から探す。
+// PATH に無い .exe は、Windows の既定のインストール先 winDefault を使う。
+func (h *Host) binary(kind, winDefault, setting, wslMode string) (string, error) {
 	name := setting
 	switch setting {
 	case "", "auto":
-		name = "ssh"
+		name = kind
 		if h.IsWSL() && wslMode != "native" {
-			name = "ssh.exe"
+			name = kind + ".exe"
 		}
-	case "ssh", "ssh.exe":
+	case kind, kind + ".exe":
 	default:
 		if _, err := h.Stat(setting); err != nil {
-			return "", fmt.Errorf("ssh に指定したファイルがありません: %s", setting)
+			return "", fmt.Errorf("%s に指定したファイルがありません: %s", kind, setting)
 		}
 		return setting, nil
 	}
 	if p, err := h.LookPath(name); err == nil {
 		return p, nil
 	}
-	if name == "ssh.exe" && h.IsWSL() {
-		if _, err := h.Stat(windowsSSH); err == nil {
-			return windowsSSH, nil
+	if name == kind+".exe" && h.IsWSL() {
+		if _, err := h.Stat(winDefault); err == nil {
+			return winDefault, nil
 		}
 	}
 	return "", fmt.Errorf("%s が見つかりません", name)
@@ -153,7 +229,7 @@ func (h *Host) SSHBinary(setting, wslMode string) (string, error) {
 
 // SSHConfigPath は、そのバイナリが既定で読む ssh config のパスを返す（表示用）。
 func (h *Host) SSHConfigPath(ctx context.Context, bin string) (string, error) {
-	if h.IsWSL() && strings.HasSuffix(strings.ToLower(bin), ".exe") {
+	if h.CrossesToWindows(bin) {
 		home, err := h.WindowsHome(ctx)
 		if err != nil {
 			return "", err
@@ -165,4 +241,23 @@ func (h *Host) SSHConfigPath(ctx context.Context, bin string) (string, error) {
 		return "", err
 	}
 	return filepath.Join(home, ".ssh", "config"), nil
+}
+
+// StateDir は状態ファイルを置くディレクトリを返す。
+func (h *Host) StateDir() (string, error) {
+	if h.GOOS == "windows" {
+		d := h.Getenv("LOCALAPPDATA")
+		if d == "" {
+			return "", errors.New("LOCALAPPDATA が設定されていないため、状態ファイルの場所を決められません")
+		}
+		return filepath.Join(d, "hashigo", "run"), nil
+	}
+	if d := h.Getenv("XDG_STATE_HOME"); d != "" {
+		return filepath.Join(d, "hashigo", "run"), nil
+	}
+	home, err := h.HomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".local", "state", "hashigo", "run"), nil
 }

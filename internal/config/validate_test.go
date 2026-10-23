@@ -110,3 +110,17 @@ func TestValidateOK(t *testing.T) {
 	mustLoad(t, envYAML)
 	mustLoad(t, rootYAML)
 }
+
+func TestValidateECSBind(t *testing.T) {
+	_, ps := loadString(t, `
+tunnels:
+  task:
+    type: ecs
+    cluster: c
+    service: s
+    container: app
+    forwards:
+      - { local: "0.0.0.0:35432", remote: "db:5432" }
+`, "linux")
+	wantProblem(t, ps, "type: ecs の forwards には待ち受けアドレスを書けません")
+}

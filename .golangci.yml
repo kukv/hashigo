@@ -27,6 +27,10 @@ linters:
               desc: platform はスーパーバイザを知らない
             - pkg: github.com/kukv/hashigo/internal/cli
               desc: platform は CLI を知らない
+            - pkg: github.com/kukv/hashigo/internal/state
+              desc: platform は状態ファイルを知らない
+            - pkg: github.com/kukv/hashigo/internal/doctor
+              desc: platform は確認項目を知らない
         # config は読み込みと検証だけを行い、プロセスの起動を知らない。
         config-layer:
           files:
@@ -38,6 +42,8 @@ linters:
               desc: config はプロセスの起動を知らない
             - pkg: github.com/kukv/hashigo/internal/cli
               desc: config は CLI を知らない
+            - pkg: github.com/kukv/hashigo/internal/doctor
+              desc: config は確認項目を知らない
         # driver はコマンドを組み立てるだけで、起動も監視もしない。
         driver-layer:
           files:
@@ -47,6 +53,8 @@ linters:
               desc: driver はプロセスの監視を知らない
             - pkg: github.com/kukv/hashigo/internal/cli
               desc: driver は CLI を知らない
+            - pkg: github.com/kukv/hashigo/internal/doctor
+              desc: driver は確認項目を知らない
         # supervisor は ProcessSpec を受け取って動かすだけで、設定ファイルを知らない。
         supervisor-layer:
           files:
@@ -56,6 +64,32 @@ linters:
               desc: supervisor は設定ファイルを知らない。組み立ては driver が行う
             - pkg: github.com/kukv/hashigo/internal/cli
               desc: supervisor は CLI を知らない
+            - pkg: github.com/kukv/hashigo/internal/doctor
+              desc: supervisor は確認項目を知らない
+        # state は状態ファイルの読み書きだけを行う葉である。
+        state-layer:
+          files:
+            - "**/internal/state/**"
+          deny:
+            - pkg: github.com/kukv/hashigo/internal/config
+              desc: state は設定ファイルを知らない
+            - pkg: github.com/kukv/hashigo/internal/driver
+              desc: state はドライバを知らない
+            - pkg: github.com/kukv/hashigo/internal/supervisor
+              desc: state はスーパーバイザを知らない
+            - pkg: github.com/kukv/hashigo/internal/cli
+              desc: state は CLI を知らない
+            - pkg: github.com/kukv/hashigo/internal/doctor
+              desc: state は確認項目を知らない
+        # doctor は確認だけを行い、プロセスの起動や CLI を知らない。
+        doctor-layer:
+          files:
+            - "**/internal/doctor/**"
+          deny:
+            - pkg: github.com/kukv/hashigo/internal/supervisor
+              desc: doctor はプロセスを起動しない
+            - pkg: github.com/kukv/hashigo/internal/cli
+              desc: doctor は CLI を知らない
         # テスト用のヘルパーは、テストされる側のパッケージを知らない。
         testutil:
           files:
@@ -68,6 +102,8 @@ linters:
             - pkg: github.com/kukv/hashigo/internal/supervisor
               desc: testutil はテスト対象を知らない
             - pkg: github.com/kukv/hashigo/internal/cli
+              desc: testutil はテスト対象を知らない
+            - pkg: github.com/kukv/hashigo/internal/doctor
               desc: testutil はテスト対象を知らない
   exclusions:
     rules:
@@ -93,6 +129,21 @@ linters:
       # 読み込むのは --config か探索で決めた設定ファイルと、そこからの include で、
       # どれも実行した本人が指定したパスである。
       - path: internal/config/load\.go
+        linters:
+          - gosec
+        text: "G304"
+      # /proc/<pid>/stat の pid は状態ファイルに記録した数値で、パスの残りは固定である。
+      - path: internal/platform/starttime_linux\.go
+        linters:
+          - gosec
+        text: "G304"
+      # 子プロセスの起動は supervisor から呼ばれる StartChild に集めている（host.go の例外と同じ理由）。
+      - path: internal/platform/proc_(unix|windows)\.go
+        linters:
+          - gosec
+        text: "G204"
+      # 状態ファイルのディレクトリは StateDir で決めた本人の場所で、読むのはそこにある *.json だけである。
+      - path: internal/state/state\.go
         linters:
           - gosec
         text: "G304"

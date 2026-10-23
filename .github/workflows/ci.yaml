@@ -81,8 +81,8 @@ jobs:
         uses: k1LoW/octocov-action@a167dc0dee441b7ffc45e1b862ab55ec0d87f278 # v1.5.2
         if: ${{ !cancelled() && matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' }}
 
-  # Docker で bastion → mid → ap → db を立て、本物の ssh で2段・3段のフォワードと
-  # Ctrl-C 後の後始末を確かめる。
+  # Docker で bastion → mid → ap → db を立て、本物の ssh で2段・3段のフォワード、
+  # ap の再起動後の再接続、status、Ctrl-C 後の後始末を確かめる。
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 15
