@@ -1,0 +1,78 @@
+name: Bug report
+description: Something does not work as the README describes
+labels: ["Kind: Bug Fix"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **A security issue does not belong here.** A config value that makes hashigo pass
+        an extra option or command to `ssh` / `aws`, a forward that listens beyond
+        127.0.0.1 when it should not, a key or credential showing up in output — report it
+        privately through the **Security** tab (*Report a vulnerability*); see
+        [SECURITY.md](https://github.com/kukv/hashigo/blob/main/SECURITY.md).
+
+        **Do not paste real host names, IP addresses, user names or keys.** Replace them
+        with placeholders such as `bastion.example.com` or `10.0.0.1` before posting.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: What `hashigo version` prints.
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - WSL (mirrored networking)
+        - WSL (NAT networking)
+    validations:
+      required: true
+  - type: input
+    id: ssh
+    attributes:
+      label: ssh
+      description: |
+        Which ssh hashigo ran (the `ssh=` line of `hashigo cmd`) and what `ssh -V` prints
+        for it. On WSL this is usually `ssh.exe`.
+      placeholder: /mnt/c/Windows/System32/OpenSSH/ssh.exe, OpenSSH_for_Windows_9.5p2
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: How you ran it
+      description: |
+        The full command line, and what `hashigo cmd <target>` prints for the same target.
+      placeholder: hashigo up dev.db
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration
+      description: |
+        The part of `hashigo.yaml` that reproduces the problem, with host names, IP
+        addresses and user names replaced by placeholders.
+      render: yaml
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: The steps that lead to it, what you expected, and what you got instead.
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: |
+        The output of hashigo (including the `[tunnel]` lines from ssh). Remove host
+        names, IP addresses and anything secret before pasting.
+      render: text
