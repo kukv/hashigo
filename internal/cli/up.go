@@ -48,7 +48,7 @@ func (a *app) up(ctx context.Context, c *cobra.Command, args []string, yes bool)
 	if len(tunnels) == 0 {
 		return errors.New("起動するトンネルがありません")
 	}
-	built, err := a.buildUnits(ctx, cfg, tunnels)
+	built, _, err := a.buildUnits(ctx, cfg, tunnels)
 	if err != nil {
 		return err
 	}
@@ -60,7 +60,7 @@ func (a *app) up(ctx context.Context, c *cobra.Command, args []string, yes bool)
 	}
 	units := make([]supervisor.Unit, len(built))
 	for i, b := range built {
-		units[i] = supervisor.Unit{ID: b.ID, Driver: b.Driver}
+		units[i] = b.unit()
 	}
 	sup := &supervisor.Supervisor{Out: c.ErrOrStderr()}
 	return sup.Run(ctx, units)
