@@ -42,7 +42,7 @@ func Run(ctx context.Context, d Deps, args []string) int {
 	root.SetIn(d.Stdin)
 	root.SetOut(d.Stdout)
 	root.SetErr(d.Stderr)
-	root.AddCommand(newVersionCmd(), a.validateCmd(), a.cmdCmd(), a.upCmd(), a.statusCmd())
+	root.AddCommand(newVersionCmd(), a.validateCmd(), a.cmdCmd(), a.upCmd(), a.statusCmd(), a.doctorCmd())
 
 	if err := root.ExecuteContext(ctx); err != nil {
 		if !errors.Is(err, errQuiet) {
