@@ -86,7 +86,7 @@ func (a *app) confirmProtected(cfg *config.Config, tunnels []*config.Tunnel, yes
 	if !a.d.IsTTY() {
 		return fmt.Errorf("%s は protected です。端末から実行して確認に答えるか、--yes を付けてください", names)
 	}
-	fmt.Fprintf(a.d.Stderr, "%s は protected です。起動しますか? [y/N] ", names)
+	_, _ = fmt.Fprintf(a.d.Stderr, "%s は protected です。起動しますか? [y/N] ", names)
 	line, _ := bufio.NewReader(a.d.Stdin).ReadString('\n')
 	switch strings.ToLower(strings.TrimSpace(line)) {
 	case "y", "yes":
@@ -105,7 +105,7 @@ func checkPorts(tunnels []*config.Tunnel) error {
 			if err != nil {
 				continue
 			}
-			conn.Close()
+			_ = conn.Close()
 			busy = append(busy, fmt.Sprintf("%s の %s", t.ID(), addr))
 		}
 	}

@@ -28,11 +28,11 @@ func (a *app) cmdCmd() *cobra.Command {
 				return err
 			}
 			w := c.OutOrStdout()
-			fmt.Fprintf(w, "# 実行環境: %s\n", a.describeEnv(ctx, cfg))
+			_, _ = fmt.Fprintf(w, "# 実行環境: %s\n", a.describeEnv(ctx, cfg))
 			for _, u := range units {
-				fmt.Fprintf(w, "# %s  ssh=%s  ssh_config=%s\n", u.ID, u.Bin, u.SSHConfig)
+				_, _ = fmt.Fprintf(w, "# %s  ssh=%s  ssh_config=%s\n", u.ID, u.Bin, u.SSHConfig)
 				for _, sp := range u.Driver.Preview() {
-					fmt.Fprintln(w, shellJoin(append([]string{sp.Path}, sp.Args...)))
+					_, _ = fmt.Fprintln(w, shellJoin(append([]string{sp.Path}, sp.Args...)))
 				}
 			}
 			return nil

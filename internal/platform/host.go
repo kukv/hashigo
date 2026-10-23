@@ -72,11 +72,11 @@ func (h *Host) WindowsHome(ctx context.Context) (string, error) {
 	}
 	out, err := h.Run.Output(ctx, "cmd.exe", "/c", "echo %USERPROFILE%")
 	if err != nil {
-		return "", fmt.Errorf("Windows のホームを取得できません: %w", err)
+		return "", fmt.Errorf("cmd.exe で Windows のホームを取得できません: %w", err)
 	}
 	win := strings.TrimSpace(string(out))
 	if win == "" || strings.Contains(win, "%") {
-		return "", errors.New("Windows のホームを取得できません: USERPROFILE が空です")
+		return "", errors.New("cmd.exe で Windows のホームを取得できません: USERPROFILE が空です")
 	}
 	out, err = h.Run.Output(ctx, "wslpath", "-u", win)
 	if err != nil {

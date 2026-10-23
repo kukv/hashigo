@@ -54,11 +54,11 @@ func printError(w io.Writer, err error) {
 	var multi interface{ Lines() []string }
 	if errors.As(err, &multi) {
 		for _, l := range multi.Lines() {
-			fmt.Fprintln(w, l)
+			_, _ = fmt.Fprintln(w, l)
 		}
 		return
 	}
-	fmt.Fprintln(w, "エラー:", err)
+	_, _ = fmt.Fprintln(w, "エラー:", err)
 }
 
 // load は設定ファイルを探して読み込む。

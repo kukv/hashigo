@@ -16,7 +16,7 @@ func (a *app) validateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintln(c.OutOrStdout(), "OK:", p)
+			_, _ = fmt.Fprintln(c.OutOrStdout(), "OK:", p)
 			return nil
 		},
 	}

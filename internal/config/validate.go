@@ -135,8 +135,15 @@ func (v *validator) tunnels() {
 			if t.Via != "" && v.c.LookupHost(t.Env, t.Via) == nil {
 				v.add(t.Src.child("via"), "via のホスト %q が見つかりません", t.Via)
 			}
-			for _, x := range []kv{{"cluster", t.Cluster}, {"service", t.Service}, {"container", t.Container},
-				{"aws", s.AWS}, {"aws_config", s.AWSConfig}, {"profile", s.Profile}, {"region", s.Region}} {
+			for _, x := range []kv{
+				{"cluster", t.Cluster},
+				{"service", t.Service},
+				{"container", t.Container},
+				{"aws", s.AWS},
+				{"aws_config", s.AWSConfig},
+				{"profile", s.Profile},
+				{"region", s.Region},
+			} {
 				if x.v != "" {
 					v.add(t.Src.child(x.k), "%s は type: ecs でだけ使えます", x.k)
 				}

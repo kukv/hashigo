@@ -1,0 +1,107 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - revive
+    - gosec
+    - misspell
+    - gocritic
+    - bodyclose
+    - unconvert
+    - unparam
+    - depguard
+  settings:
+    depguard:
+      rules:
+        # platform は OS と WSL の差分を引き受ける葉である。
+        platform-layer:
+          files:
+            - "**/internal/platform/**"
+          deny:
+            - pkg: github.com/kukv/hashigo/internal/config
+              desc: platform は設定ファイルを知らない
+            - pkg: github.com/kukv/hashigo/internal/driver
+              desc: platform はドライバを知らない
+            - pkg: github.com/kukv/hashigo/internal/supervisor
+              desc: platform はスーパーバイザを知らない
+            - pkg: github.com/kukv/hashigo/internal/cli
+              desc: platform は CLI を知らない
+        # config は読み込みと検証だけを行い、プロセスの起動を知らない。
+        config-layer:
+          files:
+            - "**/internal/config/**"
+          deny:
+            - pkg: github.com/kukv/hashigo/internal/driver
+              desc: config はコマンドの組み立てを知らない
+            - pkg: github.com/kukv/hashigo/internal/supervisor
+              desc: config はプロセスの起動を知らない
+            - pkg: github.com/kukv/hashigo/internal/cli
+              desc: config は CLI を知らない
+        # driver はコマンドを組み立てるだけで、起動も監視もしない。
+        driver-layer:
+          files:
+            - "**/internal/driver/**"
+          deny:
+            - pkg: github.com/kukv/hashigo/internal/supervisor
+              desc: driver はプロセスの監視を知らない
+            - pkg: github.com/kukv/hashigo/internal/cli
+              desc: driver は CLI を知らない
+        # supervisor は ProcessSpec を受け取って動かすだけで、設定ファイルを知らない。
+        supervisor-layer:
+          files:
+            - "**/internal/supervisor/**"
+          deny:
+            - pkg: github.com/kukv/hashigo/internal/config
+              desc: supervisor は設定ファイルを知らない。組み立ては driver が行う
+            - pkg: github.com/kukv/hashigo/internal/cli
+              desc: supervisor は CLI を知らない
+        # テスト用のヘルパーは、テストされる側のパッケージを知らない。
+        testutil:
+          files:
+            - "**/internal/testutil/**"
+          deny:
+            - pkg: github.com/kukv/hashigo/internal/config
+              desc: testutil はテスト対象を知らない
+            - pkg: github.com/kukv/hashigo/internal/driver
+              desc: testutil はテスト対象を知らない
+            - pkg: github.com/kukv/hashigo/internal/supervisor
+              desc: testutil はテスト対象を知らない
+            - pkg: github.com/kukv/hashigo/internal/cli
+              desc: testutil はテスト対象を知らない
+  exclusions:
+    rules:
+      - linters:
+          - revive
+        text: "^(exported|unused-parameter):"
+      - path: _test\.go
+        linters:
+          - gosec
+      # hashigo は ssh / aws を子プロセスとして動かすラッパーなので、実行するバイナリと
+      # 引数は設定から組み立てた値になる。シェルは介さず、引数は argv として個別に渡す。
+      # 設定値が ssh のオプションとして解釈されないことは、config の検証（- で始まる
+      # host / user の拒否）と、宛先の前の "--" で担保している。外部コマンドを起動する
+      # 場所はこの2つだけなので、例外もここにまとめる。
+      - path: internal/platform/host\.go
+        linters:
+          - gosec
+        text: "G204"
+      - path: internal/supervisor/supervisor\.go
+        linters:
+          - gosec
+        text: "G204"
+      # 読み込むのは --config か探索で決めた設定ファイルと、そこからの include で、
+      # どれも実行した本人が指定したパスである。
+      - path: internal/config/load\.go
+        linters:
+          - gosec
+        text: "G304"
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports

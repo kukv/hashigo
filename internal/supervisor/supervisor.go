@@ -117,7 +117,7 @@ type syncWriter struct {
 func (s *syncWriter) printf(format string, args ...any) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	fmt.Fprintf(s.w, format, args...)
+	_, _ = fmt.Fprintf(s.w, format, args...)
 }
 
 // lineWriter は子プロセスの出力を行ごとに区切り、接頭辞を付けて書く。

@@ -49,7 +49,8 @@ func start(t *testing.T, s *Supervisor, units ...Unit) (context.CancelFunc, <-ch
 	return cancel, done
 }
 
-func wait(t *testing.T, done <-chan error, timeout time.Duration) error {
+func wait(t *testing.T, done <-chan error) error {
+	const timeout = 5 * time.Second
 	t.Helper()
 	select {
 	case err := <-done:
@@ -67,7 +68,7 @@ func TestStopOnCancel(t *testing.T) {
 	testutil.WaitPort(t, port, 5*time.Second)
 
 	cancel()
-	if err := wait(t, done, 5*time.Second); err != nil {
+	if err := wait(t, done); err != nil {
 		t.Fatalf("キャンセル時は nil: %v", err)
 	}
 	if testutil.PortOpen(port) {
@@ -89,7 +90,7 @@ func TestEscalateToKill(t *testing.T) {
 	testutil.WaitPort(t, port, 5*time.Second)
 
 	cancel()
-	if err := wait(t, done, 5*time.Second); err != nil {
+	if err := wait(t, done); err != nil {
 		t.Fatal(err)
 	}
 	if testutil.PortOpen(port) {
@@ -109,7 +110,7 @@ func TestOtherSlotsKeepRunning(t *testing.T) {
 		t.Error("a が終了しても b は動き続ける")
 	}
 	cancel()
-	if err := wait(t, done, 5*time.Second); err != nil {
+	if err := wait(t, done); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -119,7 +120,7 @@ func TestAllExited(t *testing.T) {
 	_, done := start(t, &Supervisor{Out: &out},
 		fakeUnit("a", testutil.FreePort(t), "FAKE_EXIT_AFTER=100ms"),
 		fakeUnit("b", testutil.FreePort(t), "FAKE_EXIT_AFTER=100ms"))
-	if err := wait(t, done, 5*time.Second); !errors.Is(err, ErrAllExited) {
+	if err := wait(t, done); !errors.Is(err, ErrAllExited) {
 		t.Fatalf("全スロットが終了したら ErrAllExited: %v", err)
 	}
 }
@@ -129,14 +130,14 @@ func TestStderrPrefixed(t *testing.T) {
 	cancel, done := start(t, &Supervisor{Out: &out}, fakeUnit("dev.db", testutil.FreePort(t), "FAKE_STDERR=hello"))
 	testutil.Eventually(t, 5*time.Second, func() bool { return strings.Contains(out.String(), "[dev.db] hello") }, "stderr に接頭辞が付かない")
 	cancel()
-	wait(t, done, 5*time.Second)
+	_ = wait(t, done)
 }
 
 func TestStartFailure(t *testing.T) {
 	var out testutil.SyncBuffer
 	u := Unit{ID: "x", Driver: staticDriver{specs: []driver.ProcessSpec{{Tunnel: "x", Path: "/nonexistent/ssh"}}}}
 	_, done := start(t, &Supervisor{Out: &out}, u)
-	if err := wait(t, done, 5*time.Second); !errors.Is(err, ErrAllExited) {
+	if err := wait(t, done); !errors.Is(err, ErrAllExited) {
 		t.Fatalf("起動できなければ終了扱い: %v", err)
 	}
 	if !strings.Contains(out.String(), "[x] 起動できませんでした") {

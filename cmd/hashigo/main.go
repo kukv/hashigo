@@ -1,3 +1,4 @@
+// Command hashigo は YAML に定義した多段 SSH のポートフォワードをまとめて起動・停止する。
 package main
 
 import (

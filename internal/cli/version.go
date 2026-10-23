@@ -26,7 +26,7 @@ func newVersionCmd() *cobra.Command {
 		Short: "バージョンを表示する",
 		Args:  cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
-			fmt.Fprintln(c.OutOrStdout(), version())
+			_, _ = fmt.Fprintln(c.OutOrStdout(), version())
 			return nil
 		},
 	}

@@ -23,7 +23,7 @@ func Main() {
 		signal.Ignore(syscall.SIGTERM)
 	}
 	if s := os.Getenv("FAKE_STDERR"); s != "" {
-		fmt.Fprintln(os.Stderr, s)
+		_, _ = fmt.Fprintln(os.Stderr, s)
 	}
 	args := os.Args[1:]
 	for i := 0; i < len(args); i++ {
@@ -33,7 +33,7 @@ func Main() {
 		i++
 		ln, err := net.Listen("tcp", listenAddr(args[i]))
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "bind に失敗しました:", err)
+			_, _ = fmt.Fprintln(os.Stderr, "bind に失敗しました:", err)
 			os.Exit(255)
 		}
 		go serve(ln)
@@ -67,8 +67,8 @@ func serve(ln net.Listener) {
 			return
 		}
 		go func() {
-			defer c.Close()
-			io.Copy(c, c)
+			defer func() { _ = c.Close() }()
+			_, _ = io.Copy(c, c)
 		}()
 	}
 }
