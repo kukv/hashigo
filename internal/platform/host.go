@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -36,13 +37,21 @@ func (r ExecRunner) Output(ctx context.Context, name string, args ...string) ([]
 	if len(r.Opts.Env) > 0 {
 		cmd.Env = append(os.Environ(), r.Opts.Env...)
 	}
+	var errBuf bytes.Buffer
 	if r.Opts.Interactive {
-		cmd.Stdin, cmd.Stderr = os.Stdin, os.Stderr
+		// 端末にも出しつつ、エラー表示用に stderr を手元にも残す。
+		// cmd.Stderr を設定すると ExitError.Stderr が埋まらないため。
+		cmd.Stdin, cmd.Stderr = os.Stdin, io.MultiWriter(os.Stderr, &errBuf)
 	}
 	if r.Opts.Combined {
 		return cmd.CombinedOutput()
 	}
-	return cmd.Output()
+	out, err := cmd.Output()
+	var ee *exec.ExitError
+	if errors.As(err, &ee) && len(ee.Stderr) == 0 {
+		ee.Stderr = errBuf.Bytes()
+	}
+	return out, err
 }
 
 // ErrText は外部コマンドのエラーを表示用の文字列にする。stderr が取れていればその中身を返す。

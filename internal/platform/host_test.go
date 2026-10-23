@@ -273,3 +273,13 @@ func TestExecRunner(t *testing.T) {
 		t.Errorf("ErrText(普通のエラー) = %q", got)
 	}
 }
+
+func TestExecRunnerInteractiveKeepsStderr(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("sh を使うため Unix 系でのみ確認する")
+	}
+	_, err := ExecRunner{Opts: RunOptions{Interactive: true}}.Output(context.Background(), "sh", "-c", "echo 'Token has expired' >&2; exit 3")
+	if got := ErrText(err); !strings.Contains(got, "Token has expired") {
+		t.Errorf("端末につないでも stderr をエラーに残す: %q", got)
+	}
+}

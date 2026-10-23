@@ -217,6 +217,9 @@ func (a *app) warnExposed(ctx context.Context, w io.Writer, built []builtUnit, d
 		ports = append(ports, u.Ports...)
 	}
 	ls, err := a.d.Host.WindowsListeners(ctx, ports)
+	if ctx.Err() != nil {
+		return
+	}
 	if err != nil {
 		_, _ = fmt.Fprintf(w, "警告: Windows 側の待ち受けアドレスを確認できません: %v\n", err)
 		return
