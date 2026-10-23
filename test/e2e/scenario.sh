@@ -89,7 +89,9 @@ EOF
   hashigo cmd --config "$CFG" all
 
   # 段階をまたいで動かすため、新しいセッションで背景に起動する
-  setsid hashigo up --config "$CFG" all >"$LOG" 2>&1 </dev/null &
+  # 段階をまたぐと wait できないので、終了コードは sh -c で /tmp/up.rc に残す
+  rm -f /tmp/up.rc
+  setsid sh -c 'hashigo up --config "$1" all; echo $? >/tmp/up.rc' sh "$CFG" >"$LOG" 2>&1 </dev/null &
   # fork 直後、exec までの間は cmdline が親のままなので、up の pid が見えるまで待つ
   n=0
   while [ -z "$(up_pid)" ] && [ "$n" -lt 50 ]; do
@@ -114,6 +116,7 @@ phase_reconnect() {
   wait_echo 25432 90
   if ! echo_ok 15432; then fail "two-hop が止まっている"; fi
   if grep -q '\[two-hop\] 終了しました' "$LOG"; then fail "ap の再起動で two-hop まで切れた"; fi
+  if grep -q '\[two-hop\] .*後に再接続します' "$LOG"; then fail "ap の再起動で two-hop まで切れた"; fi
   check_status
   echo "OK: ap の再起動後に three-hop が張り直された"
 }
@@ -131,6 +134,13 @@ phase_stop() {
     fi
     sleep 1
   done
+  # Ctrl-C での停止は正常終了（終了コード 0）であること
+  n=0
+  while [ ! -s /tmp/up.rc ] && [ "$n" -lt 5 ]; do
+    n=$((n + 1))
+    sleep 1
+  done
+  if [ "$(cat /tmp/up.rc 2>/dev/null || true)" != "0" ]; then fail "Ctrl-C 後の up の終了コードが 0 ではない"; fi
   for t in two-hop three-hop; do
     if ! grep -q "\[$t\] 停止しました" "$LOG"; then fail "$t の停止が出力されない"; fi
   done
