@@ -96,6 +96,16 @@ linters:
         linters:
           - gosec
         text: "G304"
+      # /proc/<pid>/stat の pid は状態ファイルに記録した数値で、パスの残りは固定である。
+      - path: internal/platform/starttime_linux\.go
+        linters:
+          - gosec
+        text: "G304"
+      # 子プロセスの起動は supervisor から呼ばれる StartChild に集めている（host.go の例外と同じ理由）。
+      - path: internal/platform/proc_(unix|windows)\.go
+        linters:
+          - gosec
+        text: "G204"
 
 issues:
   max-issues-per-linter: 0

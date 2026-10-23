@@ -66,13 +66,14 @@ func (s *Supervisor) runSlot(ctx context.Context, out *syncWriter, sp driver.Pro
 	cmd.Env = append(os.Environ(), sp.Env...)
 	cmd.Stdout, cmd.Stderr = lw, lw
 	cmd.WaitDelay = 2 * time.Second
-	platform.PrepareCmd(cmd)
 
-	if err := cmd.Start(); err != nil {
+	child, err := platform.StartChild(cmd)
+	if err != nil {
 		out.printf("%s起動できませんでした: %v\n", label, err)
 		return
 	}
-	out.printf("%s起動しました (pid %d)\n", label, cmd.Process.Pid)
+	defer child.Close()
+	out.printf("%s起動しました (pid %d)\n", label, child.Process.Pid)
 
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
@@ -81,14 +82,14 @@ func (s *Supervisor) runSlot(ctx context.Context, out *syncWriter, sp driver.Pro
 		lw.flush()
 		out.printf("%s終了しました: %s\n", label, exitText(err))
 	case <-ctx.Done():
-		s.stop(cmd, done)
+		s.stop(child, done)
 		lw.flush()
 		out.printf("%s停止しました\n", label)
 	}
 }
 
-func (s *Supervisor) stop(cmd *exec.Cmd, done <-chan error) {
-	_ = platform.Terminate(cmd.Process)
+func (s *Supervisor) stop(child *platform.Child, done <-chan error) {
+	_ = child.Terminate()
 	timeout := s.StopTimeout
 	if timeout == 0 {
 		timeout = 5 * time.Second
@@ -98,7 +99,7 @@ func (s *Supervisor) stop(cmd *exec.Cmd, done <-chan error) {
 		return
 	case <-time.After(timeout):
 	}
-	_ = platform.Kill(cmd.Process)
+	_ = child.Kill()
 	<-done
 }
 
