@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"strings"
@@ -51,13 +52,19 @@ func (realClock) After(d time.Duration) <-chan time.Time { return time.After(d) 
 // Supervisor はトンネルのプロセスを起動し、停止の指示まで監視する。
 // スロット（Driver.Preview の1要素）ごとに、終了したら指数バックオフで張り直す。
 type Supervisor struct {
-	Out         io.Writer     // 状態の変化と子プロセスの出力を書く先
-	StopTimeout time.Duration // SIGTERM から SIGKILL までの猶予。0 なら 5 秒
-	Clock       Clock         // nil なら実時間
+	Out            io.Writer     // 状態の変化と子プロセスの出力を書く先
+	StopTimeout    time.Duration // SIGTERM から SIGKILL までの猶予。0 なら 5 秒
+	Clock          Clock         // nil なら実時間
+	HealthInterval time.Duration // ヘルスチェックの間隔。0 なら 10 秒
+	HealthTimeout  time.Duration // ヘルスチェックの接続のタイムアウト。0 なら 2 秒
+	State          *state.File   // nil なら状態ファイルを書かない
+	Base           state.Run     // 状態ファイルの pid / started_at / config
 
-	out   *syncWriter
-	mu    sync.Mutex // slots の差し替えを守る（Run の途中で Slots が呼ばれてもよい）
-	slots []*slot
+	out      *syncWriter
+	mu       sync.Mutex // slots の差し替えを守る（Run の途中で Slots が呼ばれてもよい）
+	slots    []*slot
+	writeMu  sync.Mutex
+	warnOnce sync.Once
 }
 
 type slot struct {
@@ -100,6 +107,11 @@ func (s *Supervisor) Run(ctx context.Context, units []Unit) error {
 		}()
 	}
 	wg.Wait()
+	if s.State != nil {
+		if err := s.State.Remove(); err != nil {
+			s.out.printf("警告: 状態ファイルを削除できません: %v\n", err)
+		}
+	}
 	if ctx.Err() != nil {
 		return nil
 	}
@@ -128,8 +140,20 @@ func (s *Supervisor) update(sl *slot, fn func(*state.Slot)) {
 	s.changed()
 }
 
-// changed は状態が変わったときに呼ぶ。
-func (s *Supervisor) changed() {}
+// changed は状態が変わったときに呼び、状態ファイルを書き直す。
+// 古いスナップショットが新しいものを上書きしないよう、取得から書き込みまでを1つのロックで囲む。
+func (s *Supervisor) changed() {
+	if s.State == nil {
+		return
+	}
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	r := s.Base
+	r.Slots = s.Slots()
+	if err := s.State.Write(r); err != nil {
+		s.warnOnce.Do(func() { s.out.printf("警告: 状態ファイルを書けません: %v\n", err) })
+	}
+}
 
 func (s *Supervisor) runSlot(ctx context.Context, sl *slot) {
 	clk := s.clock()
@@ -157,6 +181,10 @@ func (s *Supervisor) runSlot(ctx context.Context, sl *slot) {
 				return
 			case res.startErr != nil:
 				s.fail(sl, "起動できませんでした: "+res.startErr.Error())
+				return
+			}
+			if ctx.Err() != nil {
+				s.stopped(sl)
 				return
 			}
 			lastErr = exitText(res.err)
@@ -189,6 +217,10 @@ func (s *Supervisor) runSlot(ctx context.Context, sl *slot) {
 			s.stopped(sl)
 			return
 		case <-clk.After(delay):
+		}
+		if ctx.Err() != nil {
+			s.stopped(sl)
+			return
 		}
 		s.update(sl, func(st *state.Slot) {
 			st.State, st.NextRetryAt = state.Starting, nil
@@ -252,6 +284,11 @@ func (s *Supervisor) runOnce(ctx context.Context, sl *slot, sp driver.ProcessSpe
 
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
+	hctx, stopHealth := context.WithCancel(ctx)
+	healthDone := make(chan struct{})
+	// health が Run の戻りや状態ファイルの削除より後に書かないよう、終わりを待つ
+	defer func() { stopHealth(); <-healthDone }()
+	go func() { defer close(healthDone); s.health(hctx, sl, sp) }()
 	select {
 	case err := <-done:
 		lw.flush()
@@ -277,6 +314,69 @@ func (s *Supervisor) stop(child *platform.Child, done <-chan error) {
 	}
 	_ = child.Kill()
 	<-done
+}
+
+// health はプロセスが動いている間、ローカルポートへの接続を定期的に確かめる。失敗しても kill しない。
+func (s *Supervisor) health(ctx context.Context, sl *slot, sp driver.ProcessSpec) {
+	interval := s.HealthInterval
+	if interval == 0 {
+		interval = 10 * time.Second
+	}
+	timeout := s.HealthTimeout
+	if timeout == 0 {
+		timeout = 2 * time.Second
+	}
+	wait := min(time.Second, interval)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(wait):
+		}
+		wait = interval
+		bad := unreachable(ctx, sp.Ports, timeout)
+		if ctx.Err() != nil {
+			return
+		}
+		now := s.clock().Now()
+		var prev, cur string
+		s.update(sl, func(st *state.Slot) {
+			prev = st.State
+			switch st.State {
+			case state.Starting, state.Up, state.Unhealthy:
+			default:
+				cur = st.State
+				return
+			}
+			st.Healthy, st.CheckedAt = bad == "", &now
+			st.State = state.Up
+			if bad != "" {
+				st.State = state.Unhealthy
+			}
+			cur = st.State
+		})
+		switch {
+		case cur == state.Up && prev == state.Starting:
+			s.out.printf("%s接続を確認しました\n", sl.label)
+		case cur == state.Up && prev == state.Unhealthy:
+			s.out.printf("%s回復しました\n", sl.label)
+		case cur == state.Unhealthy && prev != state.Unhealthy:
+			s.out.printf("%sunhealthy: %s に接続できません\n", sl.label, bad)
+		}
+	}
+}
+
+// unreachable は接続できなかった最初のアドレスを返す。全部つながれば "" を返す。
+func unreachable(ctx context.Context, ports []driver.Listen, timeout time.Duration) string {
+	d := net.Dialer{Timeout: timeout}
+	for _, l := range ports {
+		c, err := d.DialContext(ctx, "tcp", l.DialAddr())
+		if err != nil {
+			return l.String()
+		}
+		_ = c.Close()
+	}
+	return ""
 }
 
 func portStrings(ls []driver.Listen) []string {

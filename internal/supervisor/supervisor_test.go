@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -339,5 +340,89 @@ func TestStderrTailIsBounded(t *testing.T) {
 	tail := lw.tail()
 	if len(tail) != tailSize || !bytes.HasSuffix(tail, []byte("end\n")) {
 		t.Errorf("末尾 %d バイトだけ残す: len=%d", tailSize, len(tail))
+	}
+}
+
+func TestHealthUp(t *testing.T) {
+	var out testutil.SyncBuffer
+	port := testutil.FreePort(t)
+	s := &Supervisor{Out: &out, HealthInterval: 100 * time.Millisecond, HealthTimeout: 200 * time.Millisecond}
+	cancel, done := start(t, s, fakeUnit("a", port))
+	testutil.Eventually(t, 5*time.Second, func() bool { return firstState(s) == state.Up }, "up にならない")
+	if got := s.Slots()[0]; !got.Healthy || got.CheckedAt == nil || got.ChildPID == 0 {
+		t.Errorf("up の状態 = %+v", got)
+	}
+	cancel()
+	_ = wait(t, done)
+	if !strings.Contains(out.String(), "[a] 接続を確認しました") {
+		t.Errorf("出力 = %s", out.String())
+	}
+}
+
+func TestHealthUnhealthyDoesNotKill(t *testing.T) {
+	var out testutil.SyncBuffer
+	port, closed := testutil.FreePort(t), testutil.FreePort(t)
+	u := fakeUnit("a", port)
+	sd := u.Driver.(staticDriver)
+	sd.specs[0].Ports = append(sd.specs[0].Ports, driver.Listen{Addr: "127.0.0.1", Port: closed})
+	u.Driver = sd
+	s := &Supervisor{Out: &out, HealthInterval: 100 * time.Millisecond, HealthTimeout: 200 * time.Millisecond}
+	cancel, done := start(t, s, u)
+	testutil.Eventually(t, 5*time.Second, func() bool { return firstState(s) == state.Unhealthy }, "unhealthy にならない")
+	if !testutil.PortOpen(port) {
+		t.Error("unhealthy でもプロセスは kill しない")
+	}
+	cancel()
+	_ = wait(t, done)
+	if want := fmt.Sprintf("[a] unhealthy: 127.0.0.1:%d に接続できません", closed); !strings.Contains(out.String(), want) {
+		t.Errorf("出力 = %s", out.String())
+	}
+}
+
+func TestStateFileLifecycle(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "run")
+	port := testutil.FreePort(t)
+	f := state.New(dir, 4321)
+	base := state.Run{PID: 4321, StartedAt: time.Now(), Config: "/x/hashigo.yaml"}
+	s := &Supervisor{Out: io.Discard, HealthInterval: 100 * time.Millisecond, State: f, Base: base}
+	u := fakeUnit("dev.db", port)
+	u.Env, u.Protected = "dev", true
+	cancel, done := start(t, s, u)
+	alive := func(int, time.Time) bool { return true }
+	testutil.Eventually(t, 5*time.Second, func() bool {
+		runs, _ := state.List(dir, alive)
+		return len(runs) == 1 && len(runs[0].Slots) == 1 && runs[0].Slots[0].State == state.Up
+	}, "状態ファイルに up が書かれない")
+	runs, _ := state.List(dir, alive)
+	got := runs[0]
+	if got.PID != 4321 || got.Config != "/x/hashigo.yaml" || got.Slots[0].Env != "dev" || !got.Slots[0].Protected {
+		t.Errorf("状態ファイル = %+v", got)
+	}
+	if want := fmt.Sprintf("127.0.0.1:%d", port); got.Slots[0].Ports[0] != want {
+		t.Errorf("ports = %v", got.Slots[0].Ports)
+	}
+	cancel()
+	if err := wait(t, done); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(f.Path); !os.IsNotExist(err) {
+		t.Error("終了したら状態ファイルを削除する")
+	}
+}
+
+func TestStateFileWriteErrorWarnsOnce(t *testing.T) {
+	var out testutil.SyncBuffer
+	blocker := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(blocker, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// ファイルの下にディレクトリは作れないので、書き込みは必ず失敗する
+	s := &Supervisor{Out: &out, HealthInterval: 50 * time.Millisecond, State: state.New(filepath.Join(blocker, "run"), 1)}
+	cancel, done := start(t, s, fakeUnit("a", testutil.FreePort(t)))
+	testutil.Eventually(t, 5*time.Second, func() bool { return firstState(s) == state.Up }, "up にならない")
+	cancel()
+	_ = wait(t, done)
+	if n := strings.Count(out.String(), "状態ファイルを書けません"); n != 1 {
+		t.Errorf("警告は1回だけ: %d 回\n%s", n, out.String())
 	}
 }
