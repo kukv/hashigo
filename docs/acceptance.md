@@ -9,6 +9,7 @@
 - ECS Exec が有効な ECS サービス、Windows 側の `aws.exe` と `session-manager-plugin`、SSO のプロファイル。あれば AssumeRole＋MFA のプロファイル
 - 設定ファイルは Windows 側の `%USERPROFILE%\.config\hashigo\config.yaml` に置き、WSL と共有する。実在のホスト名を書いた設定はリポジトリに commit しない
 - 最初に `hashigo doctor` を実行し、✗ が無いことを確かめる
+- 実機の踏み台が無いときは、[test/manual](../test/manual/README.md) の Docker の多段 sshd で ssh 周りだけを簡易に確かめられる
 
 ## 1. MVP の受け入れ（WSL、mirrored）
 

@@ -1,0 +1,5 @@
+# test/e2e/compose.yaml に重ねて使う。bastion の sshd を Windows 側の 127.0.0.1 に公開し、
+# WSL 上の hashigo が起動する ssh.exe から多段で届くようにする。
+services:
+  bastion:
+    ports: ["127.0.0.1:${POC_PORT:-2222}:22"]

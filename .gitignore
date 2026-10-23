@@ -39,6 +39,7 @@ coverage.out
 *.exe
 /bin/
 /test/e2e/bin/
+/test/manual/.work/
 
 ### Test / coverage artifacts ###
 test-report.xml
