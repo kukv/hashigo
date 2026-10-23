@@ -1,0 +1,30 @@
+name: Feature request
+description: Suggest something new hashigo should do
+labels: ["Kind: Feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        hashigo starts, stops and watches the port forwards defined in YAML, through
+        multi-hop SSH bastions (and, planned, AWS SSM). It ships as a single binary for
+        Linux, macOS and Windows and is used from WSL, so a proposal has to work on all of
+        them. Check the phases in the
+        [design document](https://github.com/kukv/hashigo/blob/main/docs/superpowers/specs/2026-10-23-hashigo-design.md)
+        first: what you want may already be planned.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem you want solved
+      description: What you are trying to do today, and where hashigo gets in the way or falls short.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you have in mind
+      description: How it would look. An example config or command line is welcome.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do instead today
+      description: The workaround you use now (plain `ssh -L`, scripts, another tool), if any.

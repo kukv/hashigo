@@ -1,0 +1,47 @@
+### JetBrains IDEs ###
+.fleet/
+.idea/
+*.iws
+*.iml
+*.ipr
+
+### VSCode ###
+.vscode/
+
+### OS ###
+.DS_Store
+**/.DS_Store
+Thumbs.db
+
+### env ###
+.env*
+!.env.example
+
+### AI agents ###
+.claude/settings.local.json
+.claude/worktrees/
+.claude/scheduled_tasks.lock
+.superpowers/
+CLAUDE.local.md
+
+### Tempfiles ###
+.tmp/
+tmp/*
+!tmp/.gitkeep
+
+### hashigo ###
+# 実際の踏み台やサーバーを書いた個人の設定ファイルを commit しない。
+# hashigo はカレントディレクトリの hashigo.yaml を読むので、ここで動かすと置きがちになる。
+/hashigo.yaml
+
+### go ###
+coverage.out
+*.exe
+/bin/
+/test/e2e/bin/
+
+### Test / coverage artifacts ###
+test-report.xml
+
+### GoReleaser ###
+dist/

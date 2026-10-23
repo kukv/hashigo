@@ -1,0 +1,50 @@
+name: hashigo-e2e
+
+services:
+  keys:
+    image: alpine:3.20
+    command: >-
+      sh -c "apk add --no-cache openssh-keygen >/dev/null &&
+             rm -f /keys/id_ed25519 /keys/id_ed25519.pub &&
+             ssh-keygen -q -t ed25519 -N '' -f /keys/id_ed25519 &&
+             chmod 644 /keys/id_ed25519"
+    volumes: [keys:/keys]
+
+  bastion:
+    build: ./sshd
+    depends_on: { keys: { condition: service_completed_successfully } }
+    volumes: [keys:/keys:ro]
+    networks: [front, n1]
+
+  mid:
+    build: ./sshd
+    depends_on: { keys: { condition: service_completed_successfully } }
+    volumes: [keys:/keys:ro]
+    networks: [n1, n2]
+
+  ap:
+    build: ./sshd
+    depends_on: { keys: { condition: service_completed_successfully } }
+    volumes: [keys:/keys:ro]
+    networks: [n2, back]
+
+  db:
+    build: ./db
+    networks: [n2, back]
+
+  client:
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+    depends_on: [bastion, mid, ap, db]
+    volumes: [keys:/keys:ro]
+    networks: [front]
+
+networks:
+  front: {}
+  n1: {}
+  n2: {}
+  back: {}
+
+volumes:
+  keys: {}
