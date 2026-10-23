@@ -1,6 +1,6 @@
 # hashigo
 
-<p align="center"><img src="docs/assets/hashigo_2.png" width="420" alt="octoscope"></p>
+<p align="center"><img src="docs/assets/hashigo_2.png" width="420" alt="hashigo"></p>
 
 [English](README.md)
 
