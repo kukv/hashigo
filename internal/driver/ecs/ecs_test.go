@@ -107,6 +107,10 @@ func TestClassify(t *testing.T) {
 			t.Errorf("認証切れは Fatal: %s", msg)
 		}
 	}
+	mfa := d.Classify(errors.New("exit status 255"), []byte("Enter MFA code for arn:aws:iam::1:mfa/me: \nAborted!"))
+	if !mfa.Fatal || !strings.Contains(mfa.Message, "MFA の認証が切れました") {
+		t.Errorf("MFA の入力待ちで失敗したら Fatal: %+v", mfa)
+	}
 	if d.Classify(errors.New("exit status 0"), []byte("Exiting session with sessionId: x")).Fatal {
 		t.Error("アイドルタイムアウトなどの終了は再接続する")
 	}

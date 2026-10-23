@@ -133,7 +133,7 @@ func TestUpWritesStateFile(t *testing.T) {
 	cancel, done, stderr := startUpHost(t, h, "", false, "up", "--config", p, "prod")
 	testutil.WaitPort(t, port, 5*time.Second)
 	testutil.Eventually(t, 5*time.Second, func() bool {
-		runs, _ := state.List(dir, platform.IsAlive)
+		runs, _ := state.List(dir, runAlive)
 		return len(runs) == 1 && runs[0].PID == os.Getpid() && len(runs[0].Slots) == 1 && runs[0].Slots[0].Tunnel == "prod.db"
 	}, "状態ファイルが書かれない")
 	cancel()
@@ -243,15 +243,37 @@ func TestUpECSPreauthFails(t *testing.T) {
 }
 
 func TestWarnExposed(t *testing.T) {
-	h := testHost(t)
+	called := false
+	h := wslHost(t, nil)
 	h.Run = funcRunner(func(string, []string) ([]byte, error) {
+		called = true
 		return []byte("0.0.0.0 15432\r\n172.29.16.1 16379\r\n"), nil
 	})
 	a := &app{d: Deps{Host: h}}
 	var out bytes.Buffer
-	a.warnExposed(context.Background(), &out, []builtUnit{{Ports: []int{15432, 16379}}}, 0)
+	a.warnExposed(context.Background(), &out, []builtUnit{
+		{Bin: "/mnt/c/WINDOWS/System32/OpenSSH/ssh.exe", Ports: []int{15432, 16379}},
+		{Bin: "/usr/bin/ssh", Ports: []int{9}},
+	}, 0)
 	if s := out.String(); !strings.Contains(s, "ポート 15432 が 0.0.0.0 で待ち受けています") || strings.Contains(s, "16379") {
 		t.Errorf("出力 = %s", s)
+	}
+	if !called {
+		t.Error("Windows のバイナリを使うなら PowerShell を呼ぶ")
+	}
+}
+
+func TestWarnExposedSkipsWhenNoWindowsBinary(t *testing.T) {
+	h := wslHost(t, nil)
+	h.Run = funcRunner(func(name string, _ []string) ([]byte, error) {
+		t.Errorf("Windows のバイナリが無ければ何も実行しない: %s", name)
+		return nil, nil
+	})
+	a := &app{d: Deps{Host: h}}
+	var out bytes.Buffer
+	a.warnExposed(context.Background(), &out, []builtUnit{{Bin: "/usr/bin/ssh", Ports: []int{15432}}}, 0)
+	if out.Len() != 0 {
+		t.Errorf("出力 = %s", out.String())
 	}
 }
 

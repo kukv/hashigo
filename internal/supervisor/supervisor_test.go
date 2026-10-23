@@ -388,7 +388,7 @@ func TestStateFileLifecycle(t *testing.T) {
 	u := fakeUnit("dev.db", port)
 	u.Env, u.Protected = "dev", true
 	cancel, done := start(t, s, u)
-	alive := func(int, time.Time) bool { return true }
+	alive := func(state.Run) bool { return true }
 	testutil.Eventually(t, 5*time.Second, func() bool {
 		runs, _ := state.List(dir, alive)
 		return len(runs) == 1 && len(runs[0].Slots) == 1 && runs[0].Slots[0].State == state.Up

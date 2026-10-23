@@ -36,6 +36,29 @@ func loadCfg(t *testing.T, yaml string) *config.Config {
 	return cfg
 }
 
+func TestStatusRowsCollapsesMultilineError(t *testing.T) {
+	cfg := loadCfg(t, statusYAML)
+	msg := "aws の準備に失敗:\n  line1\r\n\tline2\n"
+	runs := []state.Run{{PID: 1, Slots: []state.Slot{
+		{Tunnel: "dev.db", Ports: []string{"127.0.0.1:15432"}, State: state.Failed, LastError: msg},
+		{Tunnel: "prod.db", Env: "prod", Ports: []string{"127.0.0.1:25432"}, State: state.Backoff, LastError: msg},
+	}}}
+	rows := statusRows(cfg, cfg.Tunnels(), runs, func(string) bool { return false }, time.Now())
+	const want = "aws の準備に失敗: line1 line2"
+	seen := 0
+	for _, r := range rows {
+		if strings.ContainsAny(r.State+r.LastError, "\r\n\t") {
+			t.Errorf("改行や連続空白が残っている: %+v", r)
+		}
+		if r.LastError == want || r.State == "failed: "+want {
+			seen++
+		}
+	}
+	if seen < 2 {
+		t.Errorf("LastError と failed の両方が 1 行になる: %+v", rows)
+	}
+}
+
 func TestStatusRows(t *testing.T) {
 	cfg := loadCfg(t, statusYAML)
 	now := time.Date(2026, 10, 23, 10, 0, 0, 0, time.UTC)

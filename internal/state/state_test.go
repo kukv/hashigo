@@ -29,7 +29,7 @@ func TestWriteAndList(t *testing.T) {
 	if f.Path != filepath.Join(dir, "1234.json") {
 		t.Errorf("Path = %s", f.Path)
 	}
-	runs, err := List(dir, func(int, time.Time) bool { return true })
+	runs, err := List(dir, func(Run) bool { return true })
 	if err != nil || len(runs) != 1 {
 		t.Fatalf("List = %+v, %v", runs, err)
 	}
@@ -70,7 +70,7 @@ func TestListRemovesStale(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "memo.txt"), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	runs, err := List(dir, func(pid int, _ time.Time) bool { return pid == 20 })
+	runs, err := List(dir, func(r Run) bool { return r.PID == 20 })
 	if err != nil || len(runs) != 1 || runs[0].PID != 20 {
 		t.Fatalf("List = %+v, %v", runs, err)
 	}
@@ -85,7 +85,7 @@ func TestListRemovesStale(t *testing.T) {
 }
 
 func TestListMissingDir(t *testing.T) {
-	runs, err := List(filepath.Join(t.TempDir(), "none"), func(int, time.Time) bool { return true })
+	runs, err := List(filepath.Join(t.TempDir(), "none"), func(Run) bool { return true })
 	if err != nil || runs != nil {
 		t.Fatalf("ディレクトリが無ければ空: %+v, %v", runs, err)
 	}

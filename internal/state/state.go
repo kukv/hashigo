@@ -44,8 +44,10 @@ type Slot struct {
 type Run struct {
 	PID       int       `json:"pid"`
 	StartedAt time.Time `json:"started_at"`
-	Config    string    `json:"config"`
-	Slots     []Slot    `json:"slots"`
+	// StartToken は残骸の判定に使うプロセスの起動識別子。空なら StartedAt で判定する。
+	StartToken string `json:"start_token,omitempty"`
+	Config     string `json:"config"`
+	Slots      []Slot `json:"slots"`
 }
 
 // File は状態ファイル1つ。複数の goroutine から Write してよい。
@@ -103,7 +105,7 @@ func (f *File) Remove() error {
 
 // List は dir の状態ファイルを読み、生きている up のものだけを pid 順に返す。
 // 記録した pid が生きていない、起動時刻が違う（pid が再利用された）、JSON として壊れているファイルは残骸として削除する。
-func List(dir string, alive func(pid int, startedAt time.Time) bool) ([]Run, error) {
+func List(dir string, alive func(Run) bool) ([]Run, error) {
 	entries, err := os.ReadDir(dir)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
@@ -123,7 +125,7 @@ func List(dir string, alive func(pid int, startedAt time.Time) bool) ([]Run, err
 			continue // 書き換えの途中などで読めないものは、残骸とみなさない
 		}
 		var r Run
-		if err := json.Unmarshal(b, &r); err != nil || !alive(r.PID, r.StartedAt) {
+		if err := json.Unmarshal(b, &r); err != nil || !alive(r) {
 			_ = os.Remove(p)
 			continue
 		}

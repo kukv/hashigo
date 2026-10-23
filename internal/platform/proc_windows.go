@@ -25,7 +25,7 @@ func StartChild(cmd *exec.Cmd) (*Child, error) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP}
 	job, err := newKillOnCloseJob()
 	if err != nil {
-		return nil, fmt.Errorf("Job Object を作れません: %w", err)
+		return nil, fmt.Errorf("子プロセス用の Job Object を作れません: %w", err)
 	}
 	if err := cmd.Start(); err != nil {
 		_ = windows.CloseHandle(job)
@@ -48,7 +48,7 @@ func newKillOnCloseJob() (windows.Handle, error) {
 	var info windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION
 	info.BasicLimitInformation.LimitFlags = windows.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
 	if _, err := windows.SetInformationJobObject(job, windows.JobObjectExtendedLimitInformation,
-		uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info))); err != nil {
+		uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info))); err != nil { //nolint:gosec // Windows API が構造体へのポインタを要求するため
 		_ = windows.CloseHandle(job)
 		return 0, err
 	}
@@ -56,7 +56,7 @@ func newKillOnCloseJob() (windows.Handle, error) {
 }
 
 func assignToJob(job windows.Handle, pid int) error {
-	h, err := windows.OpenProcess(windows.PROCESS_SET_QUOTA|windows.PROCESS_TERMINATE, false, uint32(pid))
+	h, err := windows.OpenProcess(windows.PROCESS_SET_QUOTA|windows.PROCESS_TERMINATE, false, uint32(pid)) //nolint:gosec // pid は OS が返す 32 ビット以内の値なので切り詰めは起きない
 	if err != nil {
 		return err
 	}

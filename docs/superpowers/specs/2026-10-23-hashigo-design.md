@@ -389,7 +389,8 @@ WSL 側のプロセスを止めても、Windows 側の `ssh.exe` が残る前提
 - `up` を1回起動するごとに1ファイル。別々の端末で `up` しても上書きしない
 
 ```json
-{ "pid": 1234, "started_at": "2026-10-23T10:00:00+09:00", "config": "/path/hashigo.yaml",
+{ "pid": 1234, "started_at": "2026-10-23T10:00:00+09:00",
+  "start_token": "b0c1…:123456", "config": "/path/hashigo.yaml",
   "slots": [ { "tunnel": "dev.db", "env": "dev", "protected": false,
                "ports": ["127.0.0.1:15432"], "state": "backoff", "child_pid": 5678,
                "reconnects": 3, "next_retry_at": "...", "last_error": "...",
@@ -399,7 +400,8 @@ WSL 側のプロセスを止めても、Windows 側の `ssh.exe` が残る前提
 - 状態が変わったときと、ヘルスチェックのたびに書く。一時ファイルに書いて rename する
 - 正常終了したら削除する
 - **残骸の判定**: 記録された pid が生きていない、または pid の起動時刻が `started_at` と一致しない（pid が再利用された）場合は残骸とみなし、無視して削除する
-- `started_at` には、OS から取ったプロセスの起動時刻（8章）を書き、残骸の判定では同じ方法で取った値と 1 秒以内かで比べる
+- `started_at` には、OS から取ったプロセスの起動時刻（8章）を書く。表示に使う
+- 残骸の判定は `start_token` で比べる。Linux では boot_id と起動からの tick 数（`<boot_id>:<ticks>`）なので、NTP や WSL2 の時刻合わせで壁時計が動いても変わらない。macOS / Windows は OS が返す起動時刻から作る。`start_token` が無い状態ファイルは、従来どおり `started_at` と 1 秒以内かで比べる
 - 拡張フェーズの `up -d` / `down` / `logs` は、このファイルをそのまま使う
 
 ### 7.2 `hashigo status [対象...]`

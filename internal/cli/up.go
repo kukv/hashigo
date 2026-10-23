@@ -110,13 +110,21 @@ func (a *app) confirmProtected(cfg *config.Config, tunnels []*config.Tunnel, yes
 	return errors.New("起動を取りやめました")
 }
 
+// runAlive は状態ファイルの up がまだ動いているかを返す。start_token があればそれで、無ければ started_at で比べる。
+func runAlive(r state.Run) bool {
+	if r.StartToken != "" {
+		return platform.IsAliveToken(r.PID, r.StartToken)
+	}
+	return platform.IsAlive(r.PID, r.StartedAt)
+}
+
 // liveRuns は動いている up の状態ファイルを読む。残骸は削除される。読めなければ空として扱う。
 func (a *app) liveRuns() []state.Run {
 	dir, err := a.d.Host.StateDir()
 	if err != nil {
 		return nil
 	}
-	runs, err := state.List(dir, platform.IsAlive)
+	runs, err := state.List(dir, runAlive)
 	if err != nil {
 		return nil
 	}
@@ -202,7 +210,8 @@ func (a *app) attachState(w io.Writer, sup *supervisor.Supervisor, configPath st
 		configPath = abs
 	}
 	sup.State = state.New(dir, pid)
-	sup.Base = state.Run{PID: pid, StartedAt: started, Config: configPath}
+	token, _ := platform.StartToken(pid)
+	sup.Base = state.Run{PID: pid, StartedAt: started, StartToken: token, Config: configPath}
 }
 
 // warnExposed は relay で起動したあと、Windows 側の待ち受けが LAN に公開されていないかを確かめる。
@@ -214,7 +223,12 @@ func (a *app) warnExposed(ctx context.Context, w io.Writer, built []builtUnit, d
 	}
 	var ports []int
 	for _, u := range built {
-		ports = append(ports, u.Ports...)
+		if a.d.Host.CrossesToWindows(u.Bin) {
+			ports = append(ports, u.Ports...)
+		}
+	}
+	if len(ports) == 0 {
+		return
 	}
 	ls, err := a.d.Host.WindowsListeners(ctx, ports)
 	if ctx.Err() != nil {

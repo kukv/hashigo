@@ -156,7 +156,7 @@ func quote(s string) string {
 	return s
 }
 
-// Classify は認証切れなら Fatal にする。RUNNING のタスクが無い、アイドルタイムアウトで切れたなどは再接続する。
+// Classify は認証切れ（MFA の入力待ちで失敗した場合を含む）なら Fatal にする。RUNNING のタスクが無い、アイドルタイムアウトで切れたなどは再接続する。
 func (d *Driver) Classify(err error, tail []byte) driver.Exit {
 	text := string(tail)
 	if err != nil {
@@ -164,6 +164,10 @@ func (d *Driver) Classify(err error, tail []byte) driver.Exit {
 	}
 	if IsAuthExpired(text) {
 		return driver.Exit{Fatal: true, Message: LoginHint(d.o.Bin, d.o.Profile)}
+	}
+	// 実行中に MFA 付きの一時認証情報が切れると、再接続時に非対話で MFA を聞かれて失敗し続けるので、再試行しない
+	if strings.Contains(text, "MFA") {
+		return driver.Exit{Fatal: true, Message: fmt.Sprintf("MFA の認証が切れました。hashigo up をもう一度実行して MFA コードを入力してください（profile: %s）", d.o.Profile)}
 	}
 	return driver.Exit{}
 }

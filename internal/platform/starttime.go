@@ -20,6 +20,18 @@ func IsAlive(pid int, startedAt time.Time) bool {
 	return d > -time.Second && d < time.Second
 }
 
+// IsAliveToken は pid のプロセスが生きていて、StartToken が token と一致するかを返す。
+// Linux では壁時計に依存しないので、時刻合わせがあっても生きているプロセスを残骸と誤らない。
+func IsAliveToken(pid int, token string) bool {
+	cur, err := StartToken(pid)
+	return err == nil && cur == token
+}
+
+// formatStartToken は Linux 用の起動識別子を組み立てる。boot_id と、起動からの tick 数（壁時計が動いても変わらない）。
+func formatStartToken(bootID string, ticks int64) string {
+	return strings.TrimSpace(bootID) + ":" + strconv.FormatInt(ticks, 10)
+}
+
 // parseStatStartTicks は /proc/<pid>/stat から起動時刻（起動からの tick 数、22 番目の項目）を取り出す。
 // 2 番目の項目（comm）は空白や ) を含みうるので、最後の ) より後ろを数える。
 func parseStatStartTicks(stat []byte) (int64, error) {

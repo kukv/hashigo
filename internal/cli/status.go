@@ -92,7 +92,7 @@ func statusRows(cfg *config.Config, tunnels []*config.Tunnel, runs []state.Run, 
 		}
 		for _, s := range slots {
 			r := base
-			r.Ports, r.State, r.Reconnects, r.LastError = strings.Join(s.Ports, ","), slotState(s, dial, now), s.Reconnects, s.LastError
+			r.Ports, r.State, r.Reconnects, r.LastError = strings.Join(s.Ports, ","), slotState(s, dial, now), s.Reconnects, oneLine(s.LastError)
 			rows = append(rows, r)
 		}
 	}
@@ -131,7 +131,7 @@ func slotState(s state.Slot, dial func(string) bool, now time.Time) string {
 		secs := max(0, int(math.Ceil(s.NextRetryAt.Sub(now).Seconds())))
 		return fmt.Sprintf("backoff (次回 %ds 後)", secs)
 	case state.Failed:
-		return "failed: " + s.LastError
+		return "failed: " + oneLine(s.LastError)
 	case state.Starting:
 		return "starting"
 	case state.Stopped:
@@ -221,4 +221,9 @@ func envColor(name string, protected bool) string {
 		sum = (sum*31 + int(b)) % 1000003
 	}
 	return envPalette[sum%len(envPalette)]
+}
+
+// oneLine は空白の連続（改行を含む）を 1 つの空白にまとめ、表の 1 行に収める。
+func oneLine(s string) string {
+	return strings.Join(strings.Fields(s), " ")
 }

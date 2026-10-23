@@ -22,6 +22,33 @@ func TestParseStatStartTicks(t *testing.T) {
 	}
 }
 
+func TestFormatStartToken(t *testing.T) {
+	if got := formatStartToken("1b2c-3d4e\n", 98765); got != "1b2c-3d4e:98765" {
+		t.Errorf("formatStartToken = %q", got)
+	}
+}
+
+func TestStartTokenSelf(t *testing.T) {
+	switch runtime.GOOS {
+	case "linux", "darwin", "windows":
+	default:
+		t.Skip("未対応の OS")
+	}
+	tok, err := StartToken(os.Getpid())
+	if err != nil || tok == "" {
+		t.Fatalf("StartToken = %q, %v", tok, err)
+	}
+	if again, _ := StartToken(os.Getpid()); again != tok {
+		t.Errorf("同じプロセスの識別子は毎回同じ: %q と %q", tok, again)
+	}
+	if !IsAliveToken(os.Getpid(), tok) {
+		t.Error("自分は生きている")
+	}
+	if IsAliveToken(os.Getpid(), tok+"x") {
+		t.Error("識別子が違えば pid の再利用とみなす")
+	}
+}
+
 func TestParseBootTime(t *testing.T) {
 	got, err := parseBootTime([]byte("cpu  1 2 3\nbtime 1700000000\nprocesses 10\n"))
 	if err != nil || got != 1700000000 {
