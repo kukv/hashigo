@@ -40,7 +40,9 @@ func (r *Result) line(l Level, format string, args ...any) {
 
 func ok(title string) Result { return Result{Level: OK, Title: title} }
 
-func na(title string) Result { return Result{Level: NA, Title: title} }
+func na(title string, lines ...string) Result {
+	return Result{Level: NA, Title: title, Lines: lines}
+}
 
 // Env は確認に使う入力。
 type Env struct {
@@ -63,13 +65,17 @@ func Run(ctx context.Context, e Env) []Result {
 	c := &checker{ctx: ctx, e: e}
 	c.mode, c.modeErr = e.Host.ResolveWSLMode(ctx, e.Config.WSLMode)
 	return []Result{
-		c.platform(),    // 1
-		c.ssh(),         // 2
-		c.aws(),         // 3
-		c.socat(),       // 5
-		c.ports(),       // 6
-		c.configPaths(), // 7
-		c.ecsRelay(),    // 11
+		c.platform(),      // 1
+		c.ssh(),           // 2
+		c.aws(),           // 3
+		c.profiles(),      // 4
+		c.socat(),         // 5
+		c.ports(),         // 6
+		c.configPaths(),   // 7
+		c.identityFiles(), // 8
+		c.hosts(),         // 9
+		c.lanExposure(),   // 10
+		c.ecsRelay(),      // 11
 	}
 }
 
