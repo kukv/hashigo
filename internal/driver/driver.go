@@ -1,12 +1,31 @@
 // Package driver は、トンネル1本を張るために起動するプロセスの組み立て方を定義する。
 package driver
 
-import "context"
+import (
+	"context"
+	"net"
+	"strconv"
+)
 
 // Listen はプロセスが開くローカルの待ち受け。
 type Listen struct {
 	Addr string
 	Port int
+}
+
+// String は 127.0.0.1:15432 の形で返す。状態ファイルと表示に使う。
+func (l Listen) String() string { return net.JoinHostPort(l.Addr, strconv.Itoa(l.Port)) }
+
+// DialAddr は接続の確認に使うアドレスを返す。全アドレスで待ち受けていれば自分自身に接続する。
+func (l Listen) DialAddr() string {
+	addr := l.Addr
+	switch addr {
+	case "", "0.0.0.0":
+		addr = "127.0.0.1"
+	case "::":
+		addr = "::1"
+	}
+	return net.JoinHostPort(addr, strconv.Itoa(l.Port))
 }
 
 // ProcessSpec は起動するプロセス1つ分。
