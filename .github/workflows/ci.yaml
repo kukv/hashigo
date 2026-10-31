@@ -60,8 +60,8 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
-      - name: Install gotestsum
-        run: go install gotest.tools/gotestsum@v1.13.0
+      # mise.toml で固定したツール（gotestsum）を入れる。Renovate の mise manager がバージョンを追従する。
+      - uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
       # Windows の既定の pwsh は -coverprofile=coverage.out をドットで分けてしまうため、
       # 3つの OS とも bash で同じコマンドを使う。
       - name: Test
