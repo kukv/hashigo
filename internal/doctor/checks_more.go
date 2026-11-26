@@ -8,14 +8,14 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/kukv/hashigo/internal/driver/ecs"
+	"github.com/kukv/hashigo/internal/driver/awscli"
 	"github.com/kukv/hashigo/internal/platform"
 )
 
 // 4. 使用するプロファイルごとの認証状態。非対話で実行するので、MFA が要るときは失敗する
 func (c *checker) profiles() Result {
 	const title = "AWS の認証"
-	ts := c.tunnels("ecs")
+	ts := c.awsTunnels()
 	if len(ts) == 0 {
 		return na(title)
 	}
@@ -36,7 +36,7 @@ func (c *checker) profiles() Result {
 		if err != nil {
 			continue // 7 で報告する
 		}
-		profile := ecs.ResolveProfile(eff.Profile, h.Getenv)
+		profile := awscli.ResolveProfile(eff.Profile, h.Getenv)
 		key := strings.Join(append([]string{bin, profile, eff.Region}, env...), "\x00")
 		if seen[key] {
 			continue
@@ -49,8 +49,8 @@ func (c *checker) profiles() Result {
 		if _, err := h.Runner(platform.RunOptions{Env: env}).Output(c.ctx, bin, args...); err != nil {
 			msg := platform.ErrText(err)
 			switch {
-			case ecs.IsAuthExpired(msg):
-				r.line(Fail, "%s: %s", profile, ecs.LoginHint(bin, profile))
+			case awscli.IsAuthExpired(msg):
+				r.line(Fail, "%s: %s", profile, awscli.LoginHint(bin, profile))
 			case strings.Contains(msg, "MFA"):
 				r.line(Warn, "%s: 要認証（MFA）。up のときに入力します", profile)
 			default:

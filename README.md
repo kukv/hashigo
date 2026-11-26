@@ -13,7 +13,7 @@ itself: it runs your `ssh` as a child process with the right `-J` and `-L` optio
 WSL it runs Windows' `ssh.exe`, so the keys and the config stay on the Windows side and
 survive rebuilding the WSL distribution.
 
-> **Status: stabilization.** Reconnecting, health checks, `status`, `doctor`, ECS (SSM)
+> **Status: stabilization.** Reconnecting, health checks, `status`, `doctor`, ECS / EC2 (SSM)
 > forwards, the WSL relay mode and native Windows are supported. The manual acceptance
 > steps for real machines are in [docs/acceptance.md](docs/acceptance.md).
 
@@ -26,8 +26,9 @@ survive rebuilding the WSL distribution.
 - On WSL: mirrored networking (`networkingMode=mirrored` in `%UserProfile%\.wslconfig`) is
   recommended. With NAT, hashigo uses the relay mode, which needs `socat` on the WSL side.
   `wsl.mode: native` uses the Linux `ssh` instead.
-- For ECS tunnels: `aws` (`aws.exe` on WSL), `session-manager-plugin`, and a service with
-  ECS Exec enabled.
+- For ECS / SSM tunnels: `aws` (`aws.exe` on WSL) and `session-manager-plugin`. ECS needs a
+  service with ECS Exec enabled; SSM needs an EC2 instance that runs the SSM agent and is
+  reachable through Session Manager.
 
 ## Install
 
@@ -119,7 +120,7 @@ groups:
 | `defaults` | top level | `ssh` (`auto` / `ssh` / `ssh.exe` / a path), `ssh_config` and `aws_config` (`auto` / `windows` / `wsl` / a path), `aws`, `keepalive` (default `30s`), `reconnect` (default `true`); inherited by the levels below |
 | `wsl.mode` | top level | `auto` (default), `mirrored`, `relay`, `native` |
 | `hosts.<name>` | top level, environment | `host` (required), `user`, `via` |
-| `tunnels.<name>` | top level, environment | ssh: `via` or `host` (one of them), `forwards`, `hostname`, `keepalive`, `ssh`, `ssh_config`. ECS: `type: ecs`, `cluster`, `service`, `container`, `forwards`, `profile`, `region`, `aws`, `aws_config` |
+| `tunnels.<name>` | top level, environment | ssh: `via` or `host` (one of them), `forwards`, `hostname`, `keepalive`, `ssh`, `ssh_config`. ECS: `type: ecs`, `cluster`, `service`, `container`, `forwards`, `profile`, `region`, `aws`, `aws_config`. SSM: `type: ssm`, `target` or `target_tag` (one of them), `forwards`, `profile`, `region`, `aws`, `aws_config` |
 | `groups.<name>` | top level | A list of `env.name`, environment names or top-level tunnel names |
 | `environments.<name>` | top level | `protected`, `hosts`, `tunnels`, and settings inherited by its tunnels |
 
@@ -139,6 +140,27 @@ environments:
         container: app
         forwards: ["35432:stg-db.internal:5432"]
 ```
+
+SSM tunnels use an EC2 instance as the bastion through SSM Session Manager, so no SSH key
+has to be placed on it. Each forward runs one `aws ssm start-session` with
+`AWS-StartPortForwardingSessionToRemoteHost`. With `target_tag`, the running instance is
+looked up by its tags on every connection (the lowest ID wins when several match).
+
+```yaml
+environments:
+  stg:
+    aws: { profile: stg-admin }
+    tunnels:
+      db:
+        type: ssm
+        region: ap-northeast-1
+        target: i-0123456789abcdef0          # the instance ID
+        # target_tag: { Name: stg-bastion }  # or look it up by tags
+        forwards: ["15433:db.example.internal:5432"]
+```
+
+ECS and SSM forwards always listen on `127.0.0.1` and do not work in the WSL relay mode;
+enable mirrored networking instead.
 
 Forwards listen on `127.0.0.1` unless you give an address. `hashigo validate` reports
 every problem with `file:line:col`: unknown keys, missing references, `via` cycles, and
@@ -184,7 +206,7 @@ config files actually read, key files, missing hosts entries (for tunnels with
 | Phase | Contents |
 |---|---|
 | MVP | `validate`, `cmd`, foreground `up`, environments and `include`, WSL `ssh.exe` (mirrored) |
-| Stabilization (current) | Reconnect with backoff, health checks, `status`, `doctor`, ECS (SSM) forwards, WSL relay mode, `ssh_config` / `aws_config` switching, Windows native |
+| Stabilization (current) | Reconnect with backoff, health checks, `status`, `doctor`, ECS / EC2 (SSM) forwards, WSL relay mode, `ssh_config` / `aws_config` switching, Windows native |
 | Extensions | `up -d` / `down` / `logs`, `-R` and `-D` forwards, shell completion |
 
 The details are in the

@@ -81,6 +81,17 @@ tunnels:
     service: s
     container: app
     forwards: ["35432:db:5432"]
+  bastion-db:
+    type: ssm
+    region: ap-northeast-1
+    profile: stg-admin
+    target: i-0123456789abcdef0
+    forwards: ["15433:db.example.internal:5432"]
+  tagged-db:
+    type: ssm
+    profile: stg-admin
+    target_tag: { Name: stg-bastion }
+    forwards: ["15434:db.example.internal:5432"]
 `
 
 func TestValidateCmd(t *testing.T) {
@@ -189,6 +200,37 @@ func TestCmdECS(t *testing.T) {
 	}
 }
 
+func TestCmdSSM(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("パス区切りが異なるため Unix 系でのみ確認する")
+	}
+	p := writeConfig(t, cmdYAML)
+	code, out, errOut := run(t, "cmd", "--config", p, "bastion-db", "tagged-db")
+	if code != 0 {
+		t.Fatalf("code=%d stderr=%s", code, errOut)
+	}
+	want := `# 実行環境: linux
+# bastion-db  aws=/usr/bin/aws  aws_config=/home/u/.aws/config  profile=stg-admin
+/usr/bin/aws ssm start-session --profile stg-admin --region ap-northeast-1 --target i-0123456789abcdef0 --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters '{"host":["db.example.internal"],"portNumber":["5432"],"localPortNumber":["15433"]}'
+# tagged-db  aws=/usr/bin/aws  aws_config=/home/u/.aws/config  profile=stg-admin
+# <instance-id> は、接続のたびに次のコマンドで解決します（複数あれば ID の順で先頭を使います）
+/usr/bin/aws ec2 describe-instances --filters '[{"Name":"tag:Name","Values":["stg-bastion"]},{"Name":"instance-state-name","Values":["running"]}]' --query 'Reservations[].Instances[].InstanceId' --output text --profile stg-admin
+/usr/bin/aws ssm start-session --profile stg-admin --target '<instance-id>' --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters '{"host":["db.example.internal"],"portNumber":["5432"],"localPortNumber":["15434"]}'
+`
+	if out != want {
+		t.Errorf("cmd の出力 =\n%s\nwant\n%s", out, want)
+	}
+}
+
+func TestCmdSSMOnWSLUsesAWSExe(t *testing.T) {
+	p := writeConfig(t, "wsl:\n  mode: mirrored\ntunnels:\n  db: { type: ssm, target: i-0abc, forwards: [\"15433:db:5432\"] }\n")
+	h := wslHost(t, map[string]string{"aws.exe": "/mnt/c/aws.exe"})
+	code, out, errOut := runWith(t, h, "cmd", "--config", p, "db")
+	if code != 0 || !strings.Contains(out, "# 実行環境: linux (WSL, mirrored)") || !strings.Contains(out, "\n/mnt/c/aws.exe ssm start-session --profile default --target i-0abc ") {
+		t.Fatalf("WSL では aws.exe を使う: code=%d out=%s stderr=%s", code, out, errOut)
+	}
+}
+
 func TestCmdSSHConfig(t *testing.T) {
 	p := writeConfig(t, "defaults:\n  ssh_config: /home/u/work/ssh_config\ntunnels:\n  t: { host: x, forwards: [\"1:a:1\"] }\n")
 	code, out, errOut := run(t, "cmd", "--config", p, "t")
@@ -232,6 +274,9 @@ func TestCmdRelayErrors(t *testing.T) {
 	h = wslHost(t, map[string]string{"aws.exe": "/mnt/c/aws.exe", "socat": "/usr/bin/socat"})
 	if code, _, errOut := runWith(t, h, "cmd", "--config", p, "task"); code != 1 || !strings.Contains(errOut, "relay モードでは使えません") {
 		t.Errorf("ECS × relay はエラー: code=%d %s", code, errOut)
+	}
+	if code, _, errOut := runWith(t, h, "cmd", "--config", p, "bastion-db"); code != 1 || !strings.Contains(errOut, "SSM トンネルは relay モードでは使えません") {
+		t.Errorf("SSM × relay はエラー: code=%d %s", code, errOut)
 	}
 }
 

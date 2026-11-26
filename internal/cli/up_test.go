@@ -200,6 +200,8 @@ func ecsHost(t *testing.T, stsErr error) (*platform.Host, func() []string) {
 				return []byte("arn:aws:ecs:ap-northeast-1:1:task/c/t1\n"), nil
 			case "describe-tasks":
 				return []byte("t1-1\n"), nil
+			case "describe-instances":
+				return []byte("i-0bbb\ti-0aaa\n"), nil
 			}
 			return nil, fmt.Errorf("想定外の呼び出し: %v", args)
 		})
@@ -239,6 +241,31 @@ func TestUpECSPreauthFails(t *testing.T) {
 	}
 	if s := stderr.String(); !strings.Contains(s, "profile p1 の認証を確認できませんでした") || strings.Contains(s, "起動しました") {
 		t.Errorf("事前認証に失敗したら何も起動しない: %s", s)
+	}
+}
+
+func TestUpSSM(t *testing.T) {
+	p1, p2 := testutil.FreePort(t), testutil.FreePort(t)
+	h, sts := ecsHost(t, nil)
+	yaml := fmt.Sprintf(`
+defaults:
+  aws: %q
+tunnels:
+  a: { type: ssm, target: i-0123abcd, profile: p1, region: ap-northeast-1, forwards: ["%d:db:5432"] }
+  b: { type: ssm, target_tag: { Name: bastion }, profile: p1, region: ap-northeast-1, forwards: ["%d:db:5432"] }
+groups:
+  both: [a, b]
+`, os.Args[0], p1, p2)
+	cancel, done, stderr := startUpHost(t, h, "", false, "up", "--config", writeConfig(t, yaml), "both")
+	testutil.WaitPort(t, p1, 5*time.Second)
+	testutil.WaitPort(t, p2, 5*time.Second)
+	cancel()
+	if code := waitCode(t, done); code != 0 {
+		t.Fatalf("code=%d %s", code, stderr.String())
+	}
+	got := sts()
+	if len(got) != 1 || got[0] != "true sts get-caller-identity --profile p1 --region ap-northeast-1" {
+		t.Errorf("SSM でも同じプロファイルの事前認証は1回だけ、端末につないで行う: %v", got)
 	}
 }
 

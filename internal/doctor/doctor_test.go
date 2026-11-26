@@ -131,7 +131,7 @@ func TestLinuxSSHOnly(t *testing.T) {
 	if r := find(t, rs, "ssh"); r.Level != OK || !hasLine(r, "/usr/bin/ssh: OpenSSH_9.6p1") {
 		t.Errorf("ssh = %+v", r)
 	}
-	for _, title := range []string{"aws と session-manager-plugin", "socat（relay モード）", "ECS × relay"} {
+	for _, title := range []string{"aws と session-manager-plugin", "socat（relay モード）", "ECS / SSM × relay"} {
 		if r := find(t, rs, title); r.Level != NA {
 			t.Errorf("%s は対象外: %+v", title, r)
 		}
@@ -168,8 +168,29 @@ func TestWSLRelayWithECS(t *testing.T) {
 	if r := find(t, rs, "socat（relay モード）"); r.Level != Fail {
 		t.Errorf("socat = %+v", r)
 	}
-	if r := find(t, rs, "ECS × relay"); r.Level != Fail || !hasLine(r, "mirrored") {
+	if r := find(t, rs, "ECS / SSM × relay"); r.Level != Fail || !hasLine(r, "mirrored") {
 		t.Errorf("ECS × relay = %+v", r)
+	}
+	if r := find(t, rs, "ssh"); r.Level != NA {
+		t.Errorf("ssh トンネルが無ければ対象外: %+v", r)
+	}
+}
+
+func TestSSMTunnelChecks(t *testing.T) {
+	h := newHost(nil, nil, map[string]string{"aws": "/usr/bin/aws", "session-manager-plugin": "/usr/bin/session-manager-plugin"}, fakeRunner{
+		"/usr/bin/aws --version": "aws-cli/2\n",
+		"/usr/bin/aws sts get-caller-identity --profile stg-admin --region ap-northeast-1": `{"Account":"1"}`,
+	})
+	cfg := loadConfig(t, "tunnels:\n  db: { type: ssm, target: i-0abc, profile: stg-admin, region: ap-northeast-1, forwards: [\"15433:db:5432\"] }\n")
+	rs := runDoctor(h, cfg, nil, closed)
+	if r := find(t, rs, "aws と session-manager-plugin"); r.Level != OK || !hasLine(r, "aws-cli/2") || !hasLine(r, "session-manager-plugin: /usr/bin/session-manager-plugin") {
+		t.Errorf("aws = %+v", r)
+	}
+	if r := find(t, rs, "AWS の認証"); r.Level != OK || !hasLine(r, "stg-admin: 認証済み") {
+		t.Errorf("AWS の認証 = %+v", r)
+	}
+	if r := find(t, rs, "ssh / aws の config"); !hasLine(r, "aws (/usr/bin/aws") {
+		t.Errorf("config = %+v", r)
 	}
 	if r := find(t, rs, "ssh"); r.Level != NA {
 		t.Errorf("ssh トンネルが無ければ対象外: %+v", r)

@@ -203,12 +203,16 @@ func (l *loader) addTunnel(env *Env, name string, r rawTunnel, src Source) {
 		Name: name, Env: env.Name, Type: r.Type,
 		Host: r.Host, Via: r.Via,
 		Cluster: r.Cluster, Service: r.Service, Container: r.Container,
+		Target: r.Target, TargetTag: r.TargetTag.Tags,
 		Hostname: r.Hostname,
 		Settings: l.settings(src, r.SettingsYAML),
 		Src:      src,
 	}
 	if t.Type == "" {
 		t.Type = "ssh"
+	}
+	if r.TargetTag.Err != nil {
+		l.problemf(src.child("target_tag"), "%v", r.TargetTag.Err)
 	}
 	if len(r.Forwards) == 0 {
 		l.problemf(src, "forwards がありません")

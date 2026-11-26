@@ -3,6 +3,7 @@
 package fakebin
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -62,8 +63,16 @@ func Main() {
 	}
 }
 
-// localPortNumber は host=db,portNumber=5432,localPortNumber=15432 から 15432 を取り出す。
+// localPortNumber は host=db,portNumber=5432,localPortNumber=15432（ecs）か
+// {"host":["db"],"portNumber":["5432"],"localPortNumber":["15432"]}（ssm）から 15432 を取り出す。
 func localPortNumber(params string) string {
+	var m map[string][]string
+	if json.Unmarshal([]byte(params), &m) == nil {
+		if v := m["localPortNumber"]; len(v) == 1 {
+			return v[0]
+		}
+		return ""
+	}
 	for _, kv := range strings.Split(params, ",") {
 		if v, ok := strings.CutPrefix(kv, "localPortNumber="); ok {
 			return v
