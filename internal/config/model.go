@@ -35,17 +35,22 @@ type Host struct {
 // ID は外から参照するときの名前（環境.名前、ルート環境なら名前）。
 func (h *Host) ID() string { return qualify(h.Env, h.Name) }
 
-// Tunnel は tunnels の1件。Type は "ssh" か "ecs"。
+// Tunnel は tunnels の1件。Type は "ssh"、"ecs"、"ssm" のいずれか。
 type Tunnel struct {
 	Name, Env                   string
 	Type                        string
 	Host, Via                   string
 	Cluster, Service, Container string
+	Target                      string            // ssm: 踏み台のインスタンス ID
+	TargetTag                   map[string]string // ssm: 踏み台を引くタグ（接続のたびに ID を解決する）
 	Hostname                    string
 	Forwards                    []Forward
 	Settings                    Settings
 	Src                         Source
 }
+
+// UsesAWS は aws CLI（SSM Session Manager）でつなぐトンネル（ecs / ssm）かを返す。
+func (t *Tunnel) UsesAWS() bool { return t.Type == "ecs" || t.Type == "ssm" }
 
 // ID は外から参照するときの名前（環境.名前、ルート環境なら名前）。
 func (t *Tunnel) ID() string { return qualify(t.Env, t.Name) }

@@ -4,12 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/kukv/hashigo/internal/config"
 	"github.com/kukv/hashigo/internal/driver"
+	"github.com/kukv/hashigo/internal/driver/awscli"
 	"github.com/kukv/hashigo/internal/driver/ecs"
 	"github.com/kukv/hashigo/internal/driver/relay"
 	"github.com/kukv/hashigo/internal/driver/ssh"
+	"github.com/kukv/hashigo/internal/driver/ssm"
 	"github.com/kukv/hashigo/internal/platform"
 	"github.com/kukv/hashigo/internal/supervisor"
 )
@@ -20,12 +23,12 @@ type builtUnit struct {
 	Env       string
 	Protected bool
 	Reconnect bool
-	Type      string   // ssh / ecs
+	Type      string   // ssh / ecs / ssm
 	Bin       string   // 実行するバイナリ
 	Config    string   // 実際に読む ssh / aws config のパス（表示用）
-	Profile   string   // ECS の AWS プロファイル
-	Region    string   // ECS のリージョン（空ならプロファイルの値）
-	AWSEnv    []string // ECS の aws に渡す環境変数
+	Profile   string   // ECS / SSM の AWS プロファイル
+	Region    string   // ECS / SSM のリージョン（空ならプロファイルの値）
+	AWSEnv    []string // ECS / SSM の aws に渡す環境変数
 	Ports     []int    // ローカルポート
 	Driver    driver.Driver
 }
@@ -48,8 +51,8 @@ func (a *app) buildUnits(ctx context.Context, cfg *config.Config, tunnels []*con
 		for _, f := range t.Forwards {
 			u.Ports = append(u.Ports, f.LocalPort)
 		}
-		if t.Type == "ecs" {
-			err = b.ecs(ctx, &u, t, eff)
+		if t.UsesAWS() {
+			err = b.aws(ctx, &u, t, eff)
 		} else {
 			err = b.ssh(ctx, &u, t, eff)
 		}
@@ -103,10 +106,11 @@ func (b *builder) ssh(ctx context.Context, u *builtUnit, t *config.Tunnel, eff c
 	return nil
 }
 
-func (b *builder) ecs(ctx context.Context, u *builtUnit, t *config.Tunnel, eff config.Effective) error {
+// aws は ECS / SSM のトンネルを組み立てる。どちらも aws ssm start-session でつなぎ、--target だけが違う。
+func (b *builder) aws(ctx context.Context, u *builtUnit, t *config.Tunnel, eff config.Effective) error {
 	h := b.a.d.Host
 	if b.mode == "relay" {
-		return fmt.Errorf("%s: ECS トンネルは relay モードでは使えません（session-manager-plugin は Windows の 127.0.0.1 でしか待ち受けないため）。.wslconfig で networkingMode=mirrored を有効にしてください", t.ID())
+		return fmt.Errorf("%s: %s トンネルは relay モードでは使えません（session-manager-plugin は Windows の 127.0.0.1 でしか待ち受けないため）。.wslconfig で networkingMode=mirrored を有効にしてください", t.ID(), strings.ToUpper(t.Type))
 	}
 	bin, err := h.AWSBinary(eff.AWS, b.mode)
 	if err != nil {
@@ -119,10 +123,20 @@ func (b *builder) ecs(ctx context.Context, u *builtUnit, t *config.Tunnel, eff c
 		}
 		env, display = nil, "(不明)"
 	}
-	profile := ecs.ResolveProfile(eff.Profile, h.Getenv)
+	profile := awscli.ResolveProfile(eff.Profile, h.Getenv)
 	u.Bin, u.Config, u.Profile, u.Region, u.AWSEnv = bin, display, profile, eff.Region, env
+	run := h.Runner(platform.RunOptions{Env: env})
+	if t.Type == "ssm" {
+		u.Driver = ssm.New(ssm.Options{
+			Tunnel: t.ID(), Bin: bin, Run: run, Env: env,
+			Profile: profile, Region: eff.Region,
+			Target: t.Target, TargetTag: t.TargetTag,
+			Forwards: t.Forwards,
+		})
+		return nil
+	}
 	u.Driver = ecs.New(ecs.Options{
-		Tunnel: t.ID(), Bin: bin, Run: h.Runner(platform.RunOptions{Env: env}), Env: env,
+		Tunnel: t.ID(), Bin: bin, Run: run, Env: env,
 		Profile: profile, Region: eff.Region,
 		Cluster: t.Cluster, Service: t.Service, Container: t.Container,
 		Forwards: t.Forwards,

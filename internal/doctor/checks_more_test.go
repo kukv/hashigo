@@ -17,7 +17,7 @@ func TestAllElevenItems(t *testing.T) {
 	rs := runDoctor(h, loadConfig(t, sshYAML), nil, closed)
 	want := []string{
 		"実行環境", "ssh", "aws と session-manager-plugin", "AWS の認証", "socat（relay モード）",
-		"ローカルポートの衝突", "ssh / aws の config", "鍵ファイル（IdentityFile）", "hosts の設定漏れ", "LAN への公開（relay）", "ECS × relay",
+		"ローカルポートの衝突", "ssh / aws の config", "鍵ファイル（IdentityFile）", "hosts の設定漏れ", "LAN への公開（relay）", "ECS / SSM × relay",
 	}
 	if len(rs) != len(want) {
 		t.Fatalf("項目の数 = %d", len(rs))

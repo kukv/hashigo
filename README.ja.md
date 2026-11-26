@@ -8,14 +8,14 @@ YAML に定義したポートフォワードを、多段の SSH 踏み台や AWS
 
 hashigo（梯子）は、踏み台を一段ずつ登る作業を代わりに行います。SSH 自体は実装していません。手元の `ssh` を子プロセスとして起動し、`-J` と `-L` を組み立てて渡すだけです。そのため、`~/.ssh/config`、`ProxyJump`、`ssh-agent`、鍵はそのまま使えます。WSL では Windows の `ssh.exe` を使うので、鍵と設定は Windows 側に置いたままにでき、WSL を作り直しても影響を受けません。
 
-> **状態: 安定化。** 再接続、ヘルスチェック、`status`、`doctor`、ECS（SSM）のフォワード、WSL の relay モード、Windows ネイティブに対応しています。実機での確認の手順は [docs/acceptance.md](docs/acceptance.md) にあります。
+> **状態: 安定化。** 再接続、ヘルスチェック、`status`、`doctor`、ECS / EC2（SSM）のフォワード、WSL の relay モード、Windows ネイティブに対応しています。実機での確認の手順は [docs/acceptance.md](docs/acceptance.md) にあります。
 
 ## 必要なもの
 
 - OpenSSH: Linux と macOS では `ssh`、Windows と WSL では `ssh.exe`（Windows 版 OpenSSH）
 - 対話なしで使える鍵（ssh-agent か、パスフレーズのない鍵）。hashigo は `ssh` を `BatchMode=yes` で動かすため、パスフレーズやホスト鍵の確認には答えられません。最初に一度、`ssh <host>` を手で実行してホスト鍵を登録しておいてください。
 - WSL では mirrored ネットワーク（`%UserProfile%\.wslconfig` に `networkingMode=mirrored`）を推奨します。NAT のままなら relay モードになり、WSL 側に `socat` が必要です。`wsl.mode: native` を指定すると Linux 版の `ssh` を使います。
-- ECS のトンネルには `aws`（WSL では `aws.exe`）と `session-manager-plugin`、ECS Exec が有効なサービスが必要です。
+- ECS / SSM のトンネルには `aws`（WSL では `aws.exe`）と `session-manager-plugin` が必要です。ECS では ECS Exec が有効なサービス、SSM では SSM エージェントが動いていて Session Manager でつなげる EC2 インスタンスが要ります。
 
 ## インストール
 
@@ -102,7 +102,7 @@ groups:
 | `defaults` | トップレベル | `ssh`（`auto` / `ssh` / `ssh.exe` / パス）、`ssh_config` と `aws_config`（`auto` / `windows` / `wsl` / パス）、`aws`、`keepalive`（既定 `30s`）、`reconnect`（既定 `true`）。下の階層に継承する |
 | `wsl.mode` | トップレベル | `auto`（既定）、`mirrored`、`relay`、`native` |
 | `hosts.<名前>` | トップレベル、環境 | `host`（必須）、`user`、`via` |
-| `tunnels.<名前>` | トップレベル、環境 | ssh: `via` か `host`（どちらか一方）、`forwards`、`hostname`、`keepalive`、`ssh`、`ssh_config`。ECS: `type: ecs`、`cluster`、`service`、`container`、`forwards`、`profile`、`region`、`aws`、`aws_config` |
+| `tunnels.<名前>` | トップレベル、環境 | ssh: `via` か `host`（どちらか一方）、`forwards`、`hostname`、`keepalive`、`ssh`、`ssh_config`。ECS: `type: ecs`、`cluster`、`service`、`container`、`forwards`、`profile`、`region`、`aws`、`aws_config`。SSM: `type: ssm`、`target` か `target_tag`（どちらか一方）、`forwards`、`profile`、`region`、`aws`、`aws_config` |
 | `groups.<名前>` | トップレベル | `環境.名前`、環境名、トップレベルのトンネル名の一覧 |
 | `environments.<名前>` | トップレベル | `protected`、`hosts`、`tunnels`、その環境のトンネルに継承する設定 |
 
@@ -121,6 +121,23 @@ environments:
         container: app
         forwards: ["35432:stg-db.internal:5432"]
 ```
+
+SSM のトンネルは、EC2 インスタンスを踏み台にして SSM Session Manager でつなぎます。踏み台に SSH 鍵を配る必要はありません。forwards の1行ごとに `aws ssm start-session`（`AWS-StartPortForwardingSessionToRemoteHost`）を1つ起動します。`target_tag` を書くと、接続のたびにタグで running のインスタンスを引いて ID を決めます（複数あれば ID の順で先頭を使います）。
+
+```yaml
+environments:
+  stg:
+    aws: { profile: stg-admin }
+    tunnels:
+      db:
+        type: ssm
+        region: ap-northeast-1
+        target: i-0123456789abcdef0          # インスタンス ID
+        # target_tag: { Name: stg-bastion }  # またはタグで引く
+        forwards: ["15433:db.example.internal:5432"]
+```
+
+ECS / SSM のフォワードは `127.0.0.1` で待ち受けます（待ち受けアドレスは書けません）。WSL の relay モードでは使えないため、mirrored ネットワークを有効にしてください。
 
 フォワードは、アドレスを指定しない限り `127.0.0.1` で待ち受けます。`hashigo validate` は、未知のキー、存在しない参照、`via` の循環、環境をまたいだローカルポートの重複などを、`ファイル:行:列` 付きですべて報告します。
 
@@ -152,7 +169,7 @@ hashigo version
 | フェーズ | 内容 |
 |---|---|
 | MVP | `validate`、`cmd`、フォアグラウンドの `up`、environments と `include`、WSL の `ssh.exe`（mirrored） |
-| 安定化（現在） | 指数バックオフでの再接続、ヘルスチェック、`status`、`doctor`、ECS（SSM）のフォワード、WSL の relay モード、`ssh_config` / `aws_config` の切り替え、Windows ネイティブ |
+| 安定化（現在） | 指数バックオフでの再接続、ヘルスチェック、`status`、`doctor`、ECS / EC2（SSM）のフォワード、WSL の relay モード、`ssh_config` / `aws_config` の切り替え、Windows ネイティブ |
 | 拡張 | `up -d` / `down` / `logs`、`-R` と `-D` のフォワード、シェル補完 |
 
 詳しくは [設計書](docs/superpowers/specs/2026-10-23-hashigo-design.md) を参照してください。

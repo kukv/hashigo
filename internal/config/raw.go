@@ -52,6 +52,8 @@ type rawTunnel struct {
 	Cluster      string       `yaml:"cluster"`
 	Service      string       `yaml:"service"`
 	Container    string       `yaml:"container"`
+	Target       string       `yaml:"target"`
+	TargetTag    rawTags      `yaml:"target_tag"`
 	Hostname     string       `yaml:"hostname"`
 	Forwards     []rawForward `yaml:"forwards"`
 }
@@ -126,6 +128,34 @@ func (f *rawForward) UnmarshalYAML(unmarshal func(any) error) error {
 		f.Forward, f.Err = parseDetailedForward(local, remote)
 	default:
 		f.Err = errors.New("forwards は文字列か {local, remote} で書きます")
+	}
+	return nil
+}
+
+// rawTags は target_tag の {タグ名: 値} を受ける。形式の誤りはデコードを止めずに Err に残す。
+type rawTags struct {
+	Tags map[string]string
+	Err  error
+}
+
+func (r *rawTags) UnmarshalYAML(unmarshal func(any) error) error {
+	var v any
+	if err := unmarshal(&v); err != nil {
+		return err
+	}
+	m, ok := v.(map[string]any)
+	if !ok {
+		r.Err = errors.New("target_tag は {タグ名: 値} のマッピングで書きます")
+		return nil
+	}
+	r.Tags = map[string]string{}
+	for k, val := range m {
+		s, ok := val.(string)
+		if !ok {
+			r.Err = fmt.Errorf("target_tag.%s は文字列で書きます", k)
+			return nil
+		}
+		r.Tags[k] = s
 	}
 	return nil
 }

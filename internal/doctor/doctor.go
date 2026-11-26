@@ -115,6 +115,17 @@ func (c *checker) tunnels(typ string) []*config.Tunnel {
 	return out
 }
 
+// awsTunnels は aws CLI でつなぐトンネル（ecs / ssm）を返す。
+func (c *checker) awsTunnels() []*config.Tunnel {
+	var out []*config.Tunnel
+	for _, t := range c.e.Tunnels {
+		if t.UsesAWS() {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
 // version は bin arg を実行し、出力の1行目を返す。ssh -V は stderr に出すので stderr も取り込む。
 func (c *checker) version(bin, arg string) (Level, string) {
 	out, err := c.e.Host.Runner(platform.RunOptions{Combined: true}).Output(c.ctx, bin, arg)

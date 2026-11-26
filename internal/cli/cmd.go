@@ -30,15 +30,17 @@ func (a *app) cmdCmd() *cobra.Command {
 			w := c.OutOrStdout()
 			_, _ = fmt.Fprintf(w, "# 実行環境: %s\n", a.describeEnv(ctx, cfg))
 			for _, u := range units {
-				if u.Type == "ecs" {
+				if u.Type == "ecs" || u.Type == "ssm" {
 					_, _ = fmt.Fprintf(w, "# %s  aws=%s  aws_config=%s  profile=%s\n", u.ID, u.Bin, u.Config, u.Profile)
 					if len(u.AWSEnv) > 0 {
 						_, _ = fmt.Fprintf(w, "# 環境変数: %s\n", strings.Join(u.AWSEnv, " "))
 					}
-					if r, ok := u.Driver.(interface{ Resolvers() [][]string }); ok {
-						_, _ = fmt.Fprintln(w, "# <task-id> と <runtime-id> は、接続のたびに次のコマンドで解決します")
-						for _, args := range r.Resolvers() {
-							_, _ = fmt.Fprintln(w, shellJoin(args))
+					if r, ok := u.Driver.(interface{ Resolvers() (string, [][]string) }); ok {
+						if note, cmds := r.Resolvers(); len(cmds) > 0 {
+							_, _ = fmt.Fprintf(w, "# %s\n", note)
+							for _, args := range cmds {
+								_, _ = fmt.Fprintln(w, shellJoin(args))
+							}
 						}
 					}
 				} else {

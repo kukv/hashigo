@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -123,9 +124,25 @@ func (v *validator) noDash(src Source, key, val string) {
 	}
 }
 
+// instanceID は SSM の対象にできる ID（EC2 インスタンス i-...、マネージドインスタンス mi-...）。
+var instanceID = regexp.MustCompile(`^m?i-[0-9a-f]+$`)
+
 func (v *validator) tunnels() {
 	for _, t := range v.c.Tunnels() {
 		s := t.Settings
+		// only は、その type でだけ使えるキーが、ほかの type に書かれていないかを確かめる
+		only := func(where string, xs ...kv) {
+			for _, x := range xs {
+				if x.v != "" {
+					v.add(t.Src.child(x.k), "%s は %s でだけ使えます", x.k, where)
+				}
+			}
+		}
+		ecsKeys := []kv{{"cluster", t.Cluster}, {"service", t.Service}, {"container", t.Container}}
+		ssmKeys := []kv{{"target", t.Target}}
+		if t.TargetTag != nil {
+			ssmKeys = append(ssmKeys, kv{"target_tag", "set"})
+		}
 		switch t.Type {
 		case "ssh":
 			v.noDash(t.Src, "host", t.Host)
@@ -135,40 +152,51 @@ func (v *validator) tunnels() {
 			if t.Via != "" && v.c.LookupHost(t.Env, t.Via) == nil {
 				v.add(t.Src.child("via"), "via のホスト %q が見つかりません", t.Via)
 			}
-			for _, x := range []kv{
-				{"cluster", t.Cluster},
-				{"service", t.Service},
-				{"container", t.Container},
-				{"aws", s.AWS},
-				{"aws_config", s.AWSConfig},
-				{"profile", s.Profile},
-				{"region", s.Region},
-			} {
-				if x.v != "" {
-					v.add(t.Src.child(x.k), "%s は type: ecs でだけ使えます", x.k)
-				}
-			}
-		case "ecs":
+			only("type: ecs", ecsKeys...)
+			only("type: ssm", ssmKeys...)
+			only("type: ecs / ssm",
+				kv{"aws", s.AWS}, kv{"aws_config", s.AWSConfig}, kv{"profile", s.Profile}, kv{"region", s.Region})
+		case "ecs", "ssm":
 			if t.Host != "" || t.Via != "" {
-				v.add(t.Src, "type: ecs では host / via を書けません")
+				v.add(t.Src, "type: %s では host / via を書けません", t.Type)
 			}
-			for _, x := range []kv{{"cluster", t.Cluster}, {"service", t.Service}, {"container", t.Container}} {
-				if x.v == "" {
-					v.add(t.Src, "%s がありません", x.k)
+			if t.Type == "ecs" {
+				for _, x := range ecsKeys {
+					if x.v == "" {
+						v.add(t.Src, "%s がありません", x.k)
+					}
 				}
+				only("type: ssm", ssmKeys...)
+			} else {
+				v.ssmTarget(t)
+				only("type: ecs", ecsKeys...)
 			}
-			for _, x := range []kv{{"ssh", s.SSH}, {"ssh_config", s.SSHConfig}, {"keepalive", s.Keepalive}} {
-				if x.v != "" {
-					v.add(t.Src.child(x.k), "%s は type: ssh でだけ使えます", x.k)
-				}
-			}
+			only("type: ssh", kv{"ssh", s.SSH}, kv{"ssh_config", s.SSHConfig}, kv{"keepalive", s.Keepalive})
 			for i, f := range t.Forwards {
 				if f.Bind != defaultBind {
-					v.add(t.Src.child("forwards", i), "type: ecs の forwards には待ち受けアドレスを書けません（SSM は 127.0.0.1 で待ち受けます）: %q", f.Bind)
+					v.add(t.Src.child("forwards", i), "type: %s の forwards には待ち受けアドレスを書けません（SSM は 127.0.0.1 で待ち受けます）: %q", t.Type, f.Bind)
 				}
 			}
 		default:
-			v.add(t.Src.child("type"), "type は ssh か ecs です: %q", t.Type)
+			v.add(t.Src.child("type"), "type は ssh / ecs / ssm のいずれかです: %q", t.Type)
+		}
+	}
+}
+
+// ssmTarget は、target と target_tag のどちらか一方が正しく書かれているかを確かめる。
+func (v *validator) ssmTarget(t *Tunnel) {
+	if (t.Target == "") == (t.TargetTag == nil) {
+		v.add(t.Src, "target か target_tag のどちらか一方を書きます")
+	}
+	if t.Target != "" && !instanceID.MatchString(t.Target) {
+		v.add(t.Src.child("target"), "target はインスタンス ID（i-0123456789abcdef0 など）で書きます: %q", t.Target)
+	}
+	if t.TargetTag != nil && len(t.TargetTag) == 0 {
+		v.add(t.Src.child("target_tag"), "target_tag にタグがありません")
+	}
+	for k, val := range t.TargetTag {
+		if k == "" || val == "" {
+			v.add(t.Src.child("target_tag"), "target_tag のタグ名と値は空にできません: %q: %q", k, val)
 		}
 	}
 }

@@ -19,7 +19,7 @@ import (
 
 	"github.com/kukv/hashigo/internal/config"
 	"github.com/kukv/hashigo/internal/driver"
-	"github.com/kukv/hashigo/internal/driver/ecs"
+	"github.com/kukv/hashigo/internal/driver/awscli"
 	"github.com/kukv/hashigo/internal/platform"
 	"github.com/kukv/hashigo/internal/state"
 	"github.com/kukv/hashigo/internal/supervisor"
@@ -164,12 +164,12 @@ func checkPorts(tunnels []*config.Tunnel, runs []state.Run) error {
 	return fmt.Errorf("ローカルポートが使用中のため起動しません:\n  %s", strings.Join(busy, "\n  "))
 }
 
-// preauth は、ECS トンネルが使うプロファイルごとに一度だけ sts get-caller-identity を実行する。
+// preauth は、ECS / SSM トンネルが使うプロファイルごとに一度だけ sts get-caller-identity を実行する。
 // 端末をつなぐので、AssumeRole の MFA コードをここで入力できる。失敗したら起動しない。
 func (a *app) preauth(ctx context.Context, built []builtUnit) error {
 	seen := map[string]bool{}
 	for _, u := range built {
-		if u.Type != "ecs" {
+		if u.Type != "ecs" && u.Type != "ssm" {
 			continue
 		}
 		key := strings.Join(append([]string{u.Bin, u.Profile, u.Region}, u.AWSEnv...), "\x00")
@@ -185,8 +185,8 @@ func (a *app) preauth(ctx context.Context, built []builtUnit) error {
 		r := a.d.Host.Runner(platform.RunOptions{Env: u.AWSEnv, Interactive: true})
 		if _, err := r.Output(ctx, u.Bin, args...); err != nil {
 			msg := platform.ErrText(err)
-			if ecs.IsAuthExpired(msg) {
-				return errors.New(ecs.LoginHint(u.Bin, u.Profile))
+			if awscli.IsAuthExpired(msg) {
+				return errors.New(awscli.LoginHint(u.Bin, u.Profile))
 			}
 			return fmt.Errorf("profile %s の認証を確認できませんでした: %s", u.Profile, msg)
 		}

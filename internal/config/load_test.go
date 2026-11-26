@@ -125,6 +125,35 @@ environments:
 	wantProblem(t, ps, "profile と aws.profile は同時に書けません")
 }
 
+func TestLoadSSM(t *testing.T) {
+	cfg := mustLoad(t, `
+environments:
+  stg:
+    aws: { profile: stg-admin }
+    tunnels:
+      db:
+        type: ssm
+        region: ap-northeast-1
+        target: i-0123456789abcdef0
+        forwards: ["15433:db.example.internal:5432"]
+      tagged:
+        type: ssm
+        target_tag: { Name: stg-bastion, Env: stg }
+        forwards: ["15434:db.example.internal:5432"]
+`)
+	db := cfg.Envs["stg"].Tunnels["db"]
+	if db.Type != "ssm" || !db.UsesAWS() || db.Target != "i-0123456789abcdef0" || db.TargetTag != nil || db.Settings.Region != "ap-northeast-1" {
+		t.Errorf("db = %+v", db)
+	}
+	if eff := cfg.Effective(db); eff.Profile != "stg-admin" {
+		t.Errorf("環境の aws.profile を継承する: %+v", eff)
+	}
+	tagged := cfg.Envs["stg"].Tunnels["tagged"]
+	if tagged.Target != "" || tagged.TargetTag["Name"] != "stg-bastion" || tagged.TargetTag["Env"] != "stg" {
+		t.Errorf("tagged = %+v", tagged)
+	}
+}
+
 func TestLoadProblems(t *testing.T) {
 	_, ps := loadString(t, "tunnels:\n  t1:\n    hots: x\n", "linux")
 	if len(ps) == 0 || !strings.Contains(ps[0].String(), "hashigo.yaml:3:") {

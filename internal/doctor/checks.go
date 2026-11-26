@@ -71,10 +71,10 @@ func (c *checker) ssh() Result {
 
 const windowsPlugin = "/mnt/c/Program Files/Amazon/SessionManagerPlugin/bin/session-manager-plugin.exe"
 
-// 3. aws バイナリの場所とバージョン、session-manager-plugin の有無
+// 3. aws バイナリの場所とバージョン、session-manager-plugin の有無（ECS / SSM トンネルがある場合）
 func (c *checker) aws() Result {
 	const title = "aws と session-manager-plugin"
-	ts := c.tunnels("ecs")
+	ts := c.awsTunnels()
 	if len(ts) == 0 {
 		return na(title)
 	}
@@ -172,7 +172,7 @@ func (c *checker) configPaths() Result {
 	seen := map[string]bool{}
 	for _, t := range c.e.Tunnels {
 		eff := c.e.Config.Effective(t)
-		if t.Type == "ecs" {
+		if t.UsesAWS() {
 			bin, err := h.AWSBinary(eff.AWS, c.mode)
 			if err != nil || seen["aws\x00"+bin+"\x00"+eff.AWSConfig] {
 				continue // バイナリが無いことは 3 で報告する
@@ -199,13 +199,13 @@ func (c *checker) configPaths() Result {
 	return r
 }
 
-// 11. ECS × relay の組み合わせ（R2: session-manager-plugin は 127.0.0.1 で待ち受けるため使えない）
+// 11. ECS / SSM × relay の組み合わせ（R2: session-manager-plugin は 127.0.0.1 で待ち受けるため使えない）
 func (c *checker) ecsRelay() Result {
-	const title = "ECS × relay"
-	if len(c.tunnels("ecs")) == 0 || c.mode != "relay" {
+	const title = "ECS / SSM × relay"
+	if len(c.awsTunnels()) == 0 || c.mode != "relay" {
 		return na(title)
 	}
 	r := ok(title)
-	r.line(Fail, "ECS トンネルは relay モードでは使えません（session-manager-plugin は Windows の 127.0.0.1 でしか待ち受けないため）。.wslconfig で networkingMode=mirrored を有効にしてください")
+	r.line(Fail, "ECS / SSM トンネルは relay モードでは使えません（session-manager-plugin は Windows の 127.0.0.1 でしか待ち受けないため）。.wslconfig で networkingMode=mirrored を有効にしてください")
 	return r
 }
