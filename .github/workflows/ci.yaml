@@ -61,7 +61,7 @@ jobs:
           go-version-file: go.mod
           cache: false
       # mise.toml で固定したツール（gotestsum）を入れる。Renovate の mise manager がバージョンを追従する。
-      - uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
+      - uses: jdx/mise-action@90f833d396d0cc3674b631d2d225e306476c303a # v5.2.10
       # Windows の既定の pwsh は -coverprofile=coverage.out をドットで分けてしまうため、
       # 3つの OS とも bash で同じコマンドを使う。
       - name: Test
